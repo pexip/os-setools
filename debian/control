@@ -3,8 +3,9 @@ VCS-Git: git://anonscm.debian.org/selinux/setools.git
 VCS-Browser: http://anonscm.debian.org/gitweb/?p=selinux/setools.git;a=summary
 Priority: optional
 Section: admin
-Maintainer: Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>
-Uploaders: Manoj Srivastava <srivasta@debian.org>
+Maintainer: Pexip AS <packaging@pexip.com>
+XSBC-Pexip-Original-Maintainer: Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>
+XSBC-Pexip-Original-Uploaders: Manoj Srivastava <srivasta@debian.org>
 Standards-Version: 3.9.5
 X-Python-Version: >= 2.7
 Build-Depends: bison,
@@ -29,6 +30,7 @@ Build-Depends: bison,
                tcl-dev (>= 8.4.9),
                tk-dev (>= 8.4.9)
 Homepage: http://oss.tresys.com/projects/setools
+XS-Pexip-Upstream: http://ftp.debian.org/debian/ jessie
 
 Package: setools
 Architecture: linux-any
