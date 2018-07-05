@@ -30,7 +30,7 @@ Build-Depends: bison,
                tcl-dev (>= 8.4.9),
                tk-dev (>= 8.4.9)
 Homepage: http://oss.tresys.com/projects/setools
-XS-Pexip-Upstream: http://ftp.debian.org/debian/ jessie
+XS-Pexip-Upstream: http://ftp.debian.org/debian/ stretch
 
 Package: setools
 Architecture: linux-any
