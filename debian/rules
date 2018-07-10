@@ -4,42 +4,25 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-export DEB_LDFLAGS_MAINT_APPEND = -Wl,-O1 -Wl,--as-needed
+export DEB_CFLAGS_MAINT_APPEND = -Wno-sign-compare
 
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
-export JAVA_HOME := /usr/lib/jvm/default-java
-export JAVACFLAGS := '-source 1.5 -target 1.5'
+BUILT_USING=$(shell dpkg-query -f '$${source:Package} (= $${source:Version}), ' -W "libsepol1-dev")
 
-# Not all architectures have a java compiler
-HAVE_JAVAC:=$(shell if which javac >/dev/null 2>&1; then echo Yes; fi)
-ifneq (,$(strip $(HAVE_JAVAC)))
-JAVA_CONF_OPTION:=--enable-swig-java --with-java-prefix=$(JAVA_HOME) --with-javac-flags=$(JAVACFLAGS)
-else
-JAVA_CONF_OPTION:=
-endif
+export SEPOL = /usr/lib/$(DEB_HOST_MULTIARCH)/libsepol.a
 
 %:
-	dh $@ --with autoreconf --with python2
+	dh $@ --buildsystem=pybuild --with python3
 
-override_dh_auto_configure:
-	dh_auto_configure -- $(JAVA_CONF_OPTION) --enable-swig-python \
-                             --enable-swig-tcl   --disable-bwidget-check \
-                             --with-tcl=/usr/lib/ --with-tk=/usr/lib/ \
-                             --with-tkinclude=/usr/include/tcl/ \
-                             --disable-selinux-check
-
-override_dh_auto_test:
+override_dh_auto_build-arch:
+	dh_auto_build -a -O--buildsystem=pybuild
+	PATH=/usr/lib/$(DEB_HOST_MULTIARCH)/qt5/bin/:$(PATH) python3 setup.py build_qhc
 
 override_dh_install:
-	find $(CURDIR)/debian/tmp/usr/lib/ -name 'setools-1.0.egg-info' -delete
 	dh_install --list-missing
 
-override_dh_autoreconf:
-	dh_autoreconf --as-needed
+override_dh_gencontrol:
+	dh_gencontrol -- -VBuilt-Using="$(BUILT_USING)"
 
-override_dh_fixperms:
-	dh_fixperms
-	find $(CURDIR)/debian/libsetools-tcl/usr/lib/$(DEB_HOST_MULTIARCH)/setools/ -type f -name '*.tcl' -exec chmod -x {} \;
-	find $(CURDIR)/debian/setools-gui/usr/lib/$(DEB_HOST_MULTIARCH)/setools/ -type f -name '*.tcl' -exec chmod -x {} \;
-	chmod +x $(CURDIR)/debian/setools-gui/etc/logwatch/scripts/services/seaudit-report-service
-	chmod +x $(CURDIR)/debian/setools-gui/usr/share/setools/3.3/seaudit-report-service
+override_dh_auto_test:
+	dh_auto_test || true

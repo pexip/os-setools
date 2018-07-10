@@ -1,4 +1,0 @@
-usr/include/seaudit/
-usr/lib/*/libseaudit.a
-usr/lib/*/libseaudit.so
-usr/lib/*/pkgconfig/libseaudit.pc

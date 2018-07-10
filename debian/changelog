@@ -1,3 +1,109 @@
+setools (4.0.1-6) unstable; urgency=medium
+
+  * Properly build and install the documentation
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 21 Feb 2017 10:03:16 +0100
+
+setools (4.0.1-5) unstable; urgency=medium
+
+  * debian/watch: Also mangle the upstream version of the "rc" releases
+  * debian/control: Make python3-setools depends against netbase, the code
+    uses getprotobyname() and tries to translate protocol names.
+
+ -- Laurent Bigonville <bigon@debian.org>  Fri, 13 Jan 2017 21:01:12 +0100
+
+setools (4.0.1-4) unstable; urgency=medium
+
+  * debian/patches/fix_ftbfs_alignment.patch: Fix FTBFS on architecture where
+    alignment really matters, really...
+
+ -- Laurent Bigonville <bigon@debian.org>  Mon, 28 Nov 2016 18:01:08 +0100
+
+setools (4.0.1-3) unstable; urgency=medium
+
+  * debian/patches/fix_ftbfs_alignment.patch: Fix FTBFS on architecture where
+    alignment really matters
+
+ -- Laurent Bigonville <bigon@debian.org>  Mon, 28 Nov 2016 16:14:11 +0100
+
+setools (4.0.1-2) unstable; urgency=medium
+
+  * debian/rules: Make the tests non-fatals for now, this should fix the FTBFS
+    on the buildd
+  * debian/control: Bump {build-}dependencies to match new userspace release
+  * debian/control: Fix description of python3-setools and python3-setoolsgui
+
+ -- Laurent Bigonville <bigon@debian.org>  Thu, 24 Nov 2016 16:00:17 +0100
+
+setools (4.0.1-1) experimental; urgency=medium
+
+  * New major upstream release, setools has been completely rewritten in
+    python and only provides python bindings now.
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 30 Oct 2016 16:01:36 +0100
+
+setools (3.3.8+20151215-4) unstable; urgency=medium
+
+  * Team upload.
+  * d/p/skip_types_when_building_type_attribute_map.patch: Skip types when
+    building type attribute map. (Closes: #822987)
+
+ -- Laurent Bigonville <bigon@debian.org>  Sat, 30 Apr 2016 11:16:26 +0200
+
+setools (3.3.8+20151215-3) unstable; urgency=medium
+
+  * Team upload.
+  * debian/control: Bump versions of the libsepol and libselinux
+    build-dependencies to match the new release
+  * debian/control: Bump Standards-Version to 3.9.8 (no further changes)
+  * debian/control: Update Vcs-* URL's to please lintian (again)
+
+ -- Laurent Bigonville <bigon@debian.org>  Mon, 25 Apr 2016 18:45:35 +0200
+
+setools (3.3.8+20151215-2) unstable; urgency=medium
+
+  * Team upload.
+  * debian/libsefs4.symbols.sparc64: Add .symbols file for sparc64
+    architecture.
+  * debian/watch: The project has moved to github, update the URL
+  * debian/control: Update the Homepage URL to the new github wiki page
+  * Move logwatch script to /usr/share/logwatch (Closes: #752337)
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 24 Jan 2016 14:04:10 +0100
+
+setools (3.3.8+20151215-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream snapshot (Closes: #806485)
+    - Bump versions of the libsepol and libselinux build-dependencies
+    - Refresh the patches
+    - Drop debian/patches/fix-sediffx-crash.patch, applied upstream
+    - Drop debian/patches/fix-lsetfilecon_raw-prototype.patch, applied upstream
+    - Drop debian/patches/setools-swig-2.0.7.patch: The bindings are now
+      building properly, this patch is not needed anymore
+    - Adjust the symbols files
+  * debian/gbp.conf: Sign tags by default
+  * Bump Standards-Version to 3.9.6 (no further changes)
+  * debian/control: Bump swig version to 2.0.0
+  * debian/rules: Fix FTBFS when building arch-indep packages only (Closes:
+    #806106)
+  * debian/control: Add dh-python to the build-dependencies
+  * Drop Java bindings, they are not building anymore and I'm not even sure
+    they were working before (Closes: #748593)
+  * Adjust libsefs symbols file on several arch and make the build fail if the
+    symbols file doesn't match (Closes: #775915)
+
+ -- Laurent Bigonville <bigon@debian.org>  Mon, 28 Dec 2015 05:07:19 +0100
+
+setools (3.3.8-3.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Add symbols for arm64 (Closes: 777750)
+  * Add files/clean so rebuilds work
+  * Add symbols for sh4 (Closes: 779395)
+
+ -- Wookey <wookey@debian.org>  Sun, 31 May 2015 20:07:59 +0000
+
 setools (3.3.8-3.1pexip1) pexip; urgency=low
 
   * Prepare Pexip packaging
