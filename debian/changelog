@@ -1,3 +1,9 @@
+setools (4.0.1-6pexip1) pexip; urgency=medium
+
+  * Migrate to Stretch
+
+ -- John-Mark Bell <jmb@pexip.com>  Tue, 10 Jul 2018 11:51:30 +0000
+
 setools (4.0.1-6) unstable; urgency=medium
 
   * Properly build and install the documentation
