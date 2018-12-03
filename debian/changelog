@@ -1,3 +1,80 @@
+setools (4.2.0-1) unstable; urgency=medium
+
+  * New upstream release
+    - debian/control: Bump the {build-}dependencies
+    - Drop d/p/01_fix_ftbfs_gcc7.patch, d/p/03_cache_rules.patch and
+      d/p/04_add_additional_flags_gcc.patch, merged upstream
+    - d/p/02_remove_rpath.patch: Refreshed
+  * debian/control: Bump Standards-Version to 4.2.1 (no further changes)
+  * debian/control: Breaks against python3-sepolicy (<< 2.8-3~), it uses a
+    private API that has been removed and needs to be ported
+
+ -- Laurent Bigonville <bigon@debian.org>  Mon, 03 Dec 2018 10:12:47 +0100
+
+setools (4.2.0~beta-1) experimental; urgency=medium
+
+  * New beta release
+  * debian/control: Update the Homepage field, the project has been moved
+  * debian/watch: Update the URL here as well
+  * debian/control: Adjust the {build-}dependencies, setools is using cython
+    instead of swig now and is not statically linking against libsepol anymore
+  * d/p/01_fix_ftbfs_gcc7.patch: Refreshed; d/p/02_fix_ftbfs_be.patch,
+    d/p/03_sctp_support.patch: Dropped, merged upstream
+  * debian/rules: Remove setools/policyrep/libpolicyrep.c in the clean target
+  * d/p/02_remove_rpath.patch: Do not set the rpath for the python modules
+  * d/p/03_cache_rules.patch: Upstream patch to fix performance regressions
+  * d/p/04_add_additional_flags_gcc.patch: Fix FTBFS, from upstream
+  * debian/control: Bump Standards-Version to 4.2.0 (no further changes)
+
+ -- Laurent Bigonville <bigon@debian.org>  Mon, 13 Aug 2018 13:55:16 +0200
+
+setools (4.1.1-5) unstable; urgency=medium
+
+  * debian/patches/03_sctp_support.patch: Add SCTP support, this patch is
+    coming from Fedora, a different patch has been applied upstream but
+    incompabible with this version of setools
+
+ -- Laurent Bigonville <bigon@debian.org>  Wed, 20 Jun 2018 15:52:15 +0200
+
+setools (4.1.1-4) unstable; urgency=medium
+
+  * debian/patches/01_fix_ftbfs_gcc7.patch: Replaced by patch that has been
+    accepted upstream
+  * debian/control: Point Vcs-* fields to new (salsa) machine
+  * debian/control: Bump Standards-Version to 4.1.4 (no further changes)
+  * debian/control: Remove X-Python3-Version fields as the required version is
+    already in oldstable, to please lintian
+  * debian/rules: Use dh_missing --list-missing instead of dh_install
+  * Bump {build-}dependencies to rebuild everything against the last release
+
+ -- Laurent Bigonville <bigon@debian.org>  Wed, 30 May 2018 16:37:51 +0200
+
+setools (4.1.1-3) unstable; urgency=medium
+
+  * debian/control: Add python3-pkg-resources to the dependencies (Closes:
+    #875379)
+
+ -- Laurent Bigonville <bigon@debian.org>  Tue, 12 Sep 2017 11:30:53 +0200
+
+setools (4.1.1-2) unstable; urgency=medium
+
+  * debian/patches/02_fix_ftbfs_be.patch: Fix FTBFS on big-endian arch
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 10 Sep 2017 10:43:49 +0200
+
+setools (4.1.1-1) unstable; urgency=medium
+
+  * New upstream release
+    - Drop debian/patches/fix_ftbfs_alignment.patch, applied upstream
+  * debian/control: Bump {build-}dependencies to match new userspace release
+  * debian/control: Bump Standards-Version to 4.1.0 (no further changes)
+  * Bump debhelper compatibility to 10
+  * d/p/01_fix_ftbfs_gcc7.patch: Fix FTBFS with gcc7 (Closes: #853655)
+  * python3-setoolsgui.install, python3-setools.install: Some files have been
+    moved to the package directory now
+
+ -- Laurent Bigonville <bigon@debian.org>  Sun, 10 Sep 2017 02:46:10 +0200
+
 setools (4.0.1-6) unstable; urgency=medium
 
   * Properly build and install the documentation

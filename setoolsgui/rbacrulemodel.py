@@ -16,10 +16,8 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-
 from PyQt5.QtCore import Qt
-from setools.policyrep.exception import RuleUseError
+from setools.exception import RuleUseError
 
 from .models import SEToolsTableModel
 
@@ -28,8 +26,7 @@ class RBACRuleTableModel(SEToolsTableModel):
 
     """A table-based model for RBAC rules."""
 
-    headers = defaultdict(str, {0: "Rule Type", 1: "Source", 2: "Target",
-                                3: "Object Class", 4: "Default Role"})
+    headers = ["Rule Type", "Source", "Target", "Object Class", "Default Role"]
 
     def data(self, index, role):
         if self.resultlist and index.isValid():
@@ -39,21 +36,21 @@ class RBACRuleTableModel(SEToolsTableModel):
 
             if role == Qt.DisplayRole:
                 if col == 0:
-                    return rule.ruletype
+                    return rule.ruletype.name
                 elif col == 1:
-                    return str(rule.source)
+                    return rule.source.name
                 elif col == 2:
-                    return str(rule.target)
+                    return rule.target.name
                 elif col == 3:
                     try:
-                        return str(rule.tclass)
+                        return rule.tclass.name
                     except RuleUseError:
                         # role allow
                         return None
                 elif col == 4:
                     # next most common: default
                     try:
-                        return str(rule.default)
+                        return rule.default.name
                     except RuleUseError:
                         return None
 

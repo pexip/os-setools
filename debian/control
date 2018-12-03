@@ -3,26 +3,22 @@ Priority: optional
 Section: admin
 Maintainer: Debian SELinux maintainers <selinux-devel@lists.alioth.debian.org>
 Uploaders: Laurent Bigonville <bigon@debian.org>
-Standards-Version: 3.9.8
-Build-Depends: bison,
-               checkpolicy (>= 2.6),
-               debhelper (>= 9),
+Standards-Version: 4.2.1
+Build-Depends: checkpolicy (>= 2.8),
+               cython3,
+               debhelper (>= 10),
                dh-python,
-               flex,
-               libbz2-dev,
-               libselinux1-dev (>= 2.6),
-               libsepol1-dev (>= 2.6),
 # libqt5sql5-sqlite is needed to generate the documentation
                libqt5sql5-sqlite,
-               python3-all-dev (>= 3.3),
-               python3-networkx (>= 1.8),
+               libselinux1-dev (>= 2.8),
+               libsepol1-dev (>= 2.8),
+               python3-all-dev (>= 3.4),
+               python3-networkx (>= 2.0),
                python3-setuptools,
-               qttools5-dev-tools,
-               swig (>= 3.0.8)
-Homepage: https://github.com/TresysTechnology/setools/wiki
-VCS-Git: https://anonscm.debian.org/git/selinux/setools.git
-VCS-Browser: https://anonscm.debian.org/gitweb/?p=selinux/setools.git;a=summary
-X-Python3-Version: >= 3.3
+               qttools5-dev-tools
+Homepage: https://github.com/SELinuxProject/setools/wiki
+VCS-Git: https://salsa.debian.org/selinux-team/setools.git
+VCS-Browser: https://salsa.debian.org/selinux-team/setools
 
 Package: setools
 Architecture: linux-any
@@ -68,13 +64,12 @@ Description: GUI tools for Security Enhanced Linux policy analysis
 Package: python3-setools
 Section: python
 Architecture: linux-any
-Depends: netbase,
-         python3-networkx (>= 1.8),
-         python3-selinux (>= 2.6),
+Depends: python3-networkx (>= 2.0),
+         python3-pkg-resources,
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends}
-Built-Using: ${Built-Using}
+Breaks: python3-sepolicy (<< 2.8-3~)
 Description: SETools Python bindings
  SETools is a collection  tools for analysing security policyon SELinux
  systems.
@@ -82,7 +77,8 @@ Description: SETools Python bindings
 Package: python3-setoolsgui
 Section: python
 Architecture: linux-any
-Depends: python3-pyqt5,
+Depends: python3-pkg-resources,
+         python3-pyqt5,
          python3-setools (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},

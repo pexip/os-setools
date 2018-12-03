@@ -96,6 +96,8 @@ class DefaultWrapper(Wrapper):
 
     """Wrap default_* to allow comparisons."""
 
+    __slots__ = ("ruletype", "tclass")
+
     def __init__(self, default):
         self.origin = default
         self.ruletype = default.ruletype
@@ -110,4 +112,4 @@ class DefaultWrapper(Wrapper):
 
     def __eq__(self, other):
         return self.ruletype == other.ruletype and \
-               self.tclass == other.tclass
+            self.tclass == other.tclass

@@ -21,8 +21,8 @@ import re
 
 from . import mixins, query
 from .descriptors import CriteriaDescriptor, CriteriaSetDescriptor
-from .policyrep import ioctlSet
-from .policyrep.exception import RuleUseError, RuleNotConditional
+from .exception import RuleUseError, RuleNotConditional
+from .policyrep import IoctlSet, TERuletype
 from .util import match_regex, match_indirect_regex, match_regex_or_set
 
 
@@ -82,7 +82,7 @@ class TERuleQuery(mixins.MatchObjClass, mixins.MatchPermission, query.PolicyQuer
                       will match.  Default is false.
     """
 
-    ruletype = CriteriaSetDescriptor(lookup_function="validate_te_ruletype")
+    ruletype = CriteriaSetDescriptor(enum_class=TERuletype)
     source = CriteriaDescriptor("source_regex", "lookup_type_or_attr")
     source_regex = False
     source_indirect = True
@@ -104,7 +104,7 @@ class TERuleQuery(mixins.MatchObjClass, mixins.MatchPermission, query.PolicyQuer
     @xperms.setter
     def xperms(self, value):
         if value:
-            pending_xperms = ioctlSet()
+            pending_xperms = set()
 
             for low, high in value:
                 if not (0 <= low <= 0xffff):
@@ -116,9 +116,9 @@ class TERuleQuery(mixins.MatchObjClass, mixins.MatchPermission, query.PolicyQuer
                 if high < low:
                     high, low = low, high
 
-                pending_xperms.update(i for i in range(low, high+1))
+                pending_xperms.update(i for i in range(low, high + 1))
 
-            self._xperms = pending_xperms
+            self._xperms = IoctlSet(pending_xperms)
         else:
             self._xperms = None
 

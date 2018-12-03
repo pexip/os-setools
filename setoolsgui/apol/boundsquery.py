@@ -21,17 +21,20 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
 from setools import BoundsQuery
 
 from ..logtosignal import LogHandlerToSignal
 from ..models import SEToolsListModel, invert_list_selection
 from ..boundsmodel import BoundsTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_textedits, \
+    save_checkboxes, save_lineedits, save_textedits
 
 
-class BoundsQueryTab(SEToolsWidget, QScrollArea):
+class BoundsQueryTab(AnalysisTab):
 
     """Bounds browser and query tab."""
 
@@ -48,7 +51,7 @@ class BoundsQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.boundsquery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("boundsquery.ui")
+        self.load_ui("apol/boundsquery.ui")
 
         # set up results
         self.table_results_model = BoundsTableModel(self)
@@ -58,6 +61,7 @@ class BoundsQueryTab(SEToolsWidget, QScrollArea):
         self.table_results.sortByColumn(1, Qt.AscendingOrder)
 
         # setup indications of errors on level/range
+        self.errors = set()
         self.orig_palette = self.parent.palette()
         self.error_palette = self.parent.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -102,16 +106,14 @@ class BoundsQueryTab(SEToolsWidget, QScrollArea):
     # Parent criteria
     #
     def clear_parent_error(self):
-        self.parent.setToolTip("Match the parent type.")
-        self.parent.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.parent, "Match the parent type.")
 
     def set_parent(self):
         try:
             self.query.parent = self.parent.text()
         except Exception as ex:
             self.log.error("Type parent error: {0}".format(ex))
-            self.parent.setToolTip("Error: " + str(ex))
-            self.parent.setPalette(self.error_palette)
+            self.set_criteria_error(self.parent, ex)
 
     def set_parent_regex(self, state):
         self.log.debug("Setting parent_regex {0}".format(state))
@@ -123,22 +125,44 @@ class BoundsQueryTab(SEToolsWidget, QScrollArea):
     # Child criteria
     #
     def clear_child_error(self):
-        self.child.setToolTip("Match the child type.")
-        self.child.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.child, "Match the child type.")
 
     def set_child(self):
         try:
             self.query.child = self.child.text()
         except Exception as ex:
             self.log.error("Type child error: {0}".format(ex))
-            self.child.setToolTip("Error: " + str(ex))
-            self.child.setPalette(self.error_palette)
+            self.set_criteria_error(self.child, ex)
 
     def set_child_regex(self, state):
         self.log.debug("Setting child_regex {0}".format(state))
         self.query.child_regex = state
         self.clear_child_error()
         self.set_child()
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "typebounds",
+                                         "parent_regex", "child_regex"])
+        save_lineedits(self, settings, ["parent", "child"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "typebounds",
+                                         "parent_regex", "child_regex"])
+        load_lineedits(self, settings, ["parent", "child"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner

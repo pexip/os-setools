@@ -16,10 +16,8 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-
 from PyQt5.QtCore import Qt, QModelIndex
-from setools.policyrep.exception import MLSDisabled
+from setools.exception import MLSDisabled
 
 from .details import DetailsPopup
 from .models import SEToolsTableModel
@@ -39,19 +37,19 @@ def user_detail(parent, user):
     roles = sorted(user.roles)
     detail.append_header("Roles ({0}):".format(len(roles)))
 
-    for r in roles:
-        detail.append("    {0}".format(r))
+    for role in roles:
+        detail.append("    {0}".format(role))
 
     try:
-        l = user.mls_level
-        r = user.mls_range
+        level = user.mls_level
+        range_ = user.mls_range
     except MLSDisabled:
         pass
     else:
         detail.append_header("\nDefault MLS Level:")
-        detail.append("    {0}".format(l))
+        detail.append("    {0}".format(level))
         detail.append_header("\nMLS Range:")
-        detail.append("    {0}".format(r))
+        detail.append("    {0}".format(range_))
 
     detail.show()
 
@@ -60,7 +58,7 @@ class UserTableModel(SEToolsTableModel):
 
     """Table-based model for users."""
 
-    headers = defaultdict(str, {0: "Name", 1: "Roles", 2: "Default Level", 3: "Range"})
+    headers = ["Name", "Roles", "Default Level", "Range"]
 
     def __init__(self, parent, mls):
         super(UserTableModel, self).__init__(parent)
@@ -77,9 +75,9 @@ class UserTableModel(SEToolsTableModel):
                 user = self.resultlist[row]
 
                 if col == 0:
-                    return str(user)
+                    return user.name
                 elif col == 1:
-                    return ", ".join(sorted(str(r) for r in user.roles))
+                    return ", ".join(sorted(r.name for r in user.roles))
                 elif col == 2:
                     try:
                         return str(user.mls_level)

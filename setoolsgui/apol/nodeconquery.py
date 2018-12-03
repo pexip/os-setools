@@ -1,4 +1,5 @@
 # Copyright 2016, Tresys Technology, LLC
+# Copyright 2016, Chris PeBenito <pebenito@ieee.org>
 #
 # This file is part of SETools.
 #
@@ -18,20 +19,22 @@
 #
 import sys
 import logging
-from socket import AF_INET, AF_INET6
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
-from setools import NodeconQuery
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
+from setools import NodeconQuery, NodeconIPVersion
 
 from ..logtosignal import LogHandlerToSignal
 from ..nodeconmodel import NodeconTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_textedits, load_comboboxes, \
+    save_checkboxes, save_lineedits, save_textedits, save_comboboxes
 
 
-class NodeconQueryTab(SEToolsWidget, QScrollArea):
+class NodeconQueryTab(AnalysisTab):
 
     """An nodecon query."""
 
@@ -48,9 +51,7 @@ class NodeconQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.nodeconquery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("nodeconquery.ui")
-
-        self.proto_map = {"": None, "IPv4": AF_INET, "IPv6": AF_INET6}
+        self.load_ui("apol/nodeconquery.ui")
 
         # set up user autocompletion
         user_completion_list = [str(u) for u in self.policy.users()]
@@ -76,7 +77,13 @@ class NodeconQueryTab(SEToolsWidget, QScrollArea):
         self.type_completion.setModel(type_completer_model)
         self.type_.setCompleter(self.type_completion)
 
+        # setup IP version
+        # item 0 is empty string (in the .ui file)
+        self.ip_version.insertItem(1, "IPv4", NodeconIPVersion.ipv4)
+        self.ip_version.insertItem(2, "IPv6", NodeconIPVersion.ipv6)
+
         # setup indications of errors on source/target/default
+        self.errors = set()
         self.orig_palette = self.type_.palette()
         self.error_palette = self.type_.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -119,14 +126,6 @@ class NodeconQueryTab(SEToolsWidget, QScrollArea):
         self.criteria_frame.setHidden(not self.criteria_expander.isChecked())
         self.notes.setHidden(not self.notes_expander.isChecked())
 
-        # Network criteria is available only on Python 3.3+
-        if sys.version_info < (3, 3):
-            self.network_criteria.setEnabled(False)
-            self.network_criteria.setToolTip("This feature requires Python 3.3 or newer.")
-            self.network.setToolTip("This feature requires Python 3.3 or newer.")
-            self.network_exact.setToolTip("This feature requires Python 3.3 or newer.")
-            self.network_overlap.setToolTip("This feature requires Python 3.3 or newer.")
-
         # Range criteria is available only if policy is MLS
         if not self.policy.mls:
             self.range_criteria.setEnabled(False)
@@ -157,31 +156,27 @@ class NodeconQueryTab(SEToolsWidget, QScrollArea):
     # Network criteria
     #
     def clear_network_error(self):
-        self.network.setToolTip("Match the network.")
-        self.network.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.network, "Match the network.")
 
     def set_network(self):
         try:
             self.query.network = self.network.text()
         except Exception as ex:
             self.log.error("Network error: {0}".format(ex))
-            self.network.setToolTip("Error: " + str(ex))
-            self.network.setPalette(self.error_palette)
+            self.set_criteria_error(self.network, ex)
 
     #
     # User criteria
     #
     def clear_user_error(self):
-        self.user.setToolTip("Match the user of the context.")
-        self.user.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.user, "Match the user of the context.")
 
     def set_user(self):
         try:
             self.query.user = self.user.text()
         except Exception as ex:
             self.log.error("Context user error: {0}".format(ex))
-            self.user.setToolTip("Error: " + str(ex))
-            self.user.setPalette(self.error_palette)
+            self.set_criteria_error(self.user, ex)
 
     def set_user_regex(self, state):
         self.log.debug("Setting user_regex {0}".format(state))
@@ -193,16 +188,14 @@ class NodeconQueryTab(SEToolsWidget, QScrollArea):
     # Role criteria
     #
     def clear_role_error(self):
-        self.role.setToolTip("Match the role of the context.")
-        self.role.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.role, "Match the role of the context.")
 
     def set_role(self):
         try:
             self.query.role = self.role.text()
         except Exception as ex:
             self.log.error("Context role error: {0}".format(ex))
-            self.role.setToolTip("Error: " + str(ex))
-            self.role.setPalette(self.error_palette)
+            self.set_criteria_error(self.role, ex)
 
     def set_role_regex(self, state):
         self.log.debug("Setting role_regex {0}".format(state))
@@ -214,16 +207,14 @@ class NodeconQueryTab(SEToolsWidget, QScrollArea):
     # Type criteria
     #
     def clear_type_error(self):
-        self.type_.setToolTip("Match the type of the context.")
-        self.type_.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.type_, "Match the type of the context.")
 
     def set_type(self):
         try:
             self.query.type_ = self.type_.text()
         except Exception as ex:
             self.log.error("Context type error: {0}".format(ex))
-            self.type_.setToolTip("Error: " + str(ex))
-            self.type_.setPalette(self.error_palette)
+            self.set_criteria_error(self.type_, ex)
 
     def set_type_regex(self, state):
         self.log.debug("Setting type_regex {0}".format(state))
@@ -235,16 +226,42 @@ class NodeconQueryTab(SEToolsWidget, QScrollArea):
     # Range criteria
     #
     def clear_range_error(self):
-        self.range_.setToolTip("Match the range of the context.")
-        self.range_.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.range_, "Match the range of the context.")
 
     def set_range(self):
         try:
             self.query.range_ = self.range_.text()
         except Exception as ex:
             self.log.info("Context range error: " + str(ex))
-            self.range_.setToolTip("Error: " + str(ex))
-            self.range_.setPalette(self.error_palette)
+            self.set_criteria_error(self.range_, ex)
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "network_exact", "network_overlap",
+                                         "user_regex", "role_regex", "type_regex", "range_exact",
+                                         "range_overlap", "range_subset", "range_superset"])
+        save_lineedits(self, settings, ["network", "user", "role", "type_", "range_"])
+        save_comboboxes(self, settings, ["ip_version"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "network_exact", "network_overlap",
+                                         "user_regex", "role_regex", "type_regex", "range_exact",
+                                         "range_overlap", "range_subset", "range_superset"])
+        load_lineedits(self, settings, ["network", "user", "role", "type_", "range_"])
+        load_comboboxes(self, settings, ["ip_version"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner
@@ -252,7 +269,7 @@ class NodeconQueryTab(SEToolsWidget, QScrollArea):
     def run(self, button):
         # right now there is only one button.
         self.query.network_overlap = self.network_overlap.isChecked()
-        self.query.ip_version = self.proto_map[self.ip_version.currentData(Qt.DisplayRole)]
+        self.query.ip_version = self.ip_version.currentData(Qt.UserRole)
         self.query.range_overlap = self.range_overlap.isChecked()
         self.query.range_subset = self.range_subset.isChecked()
         self.query.range_superset = self.range_superset.isChecked()

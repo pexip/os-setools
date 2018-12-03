@@ -19,7 +19,7 @@
 from weakref import WeakKeyDictionary
 
 
-class DiffResultDescriptor(object):
+class DiffResultDescriptor:
 
     """Descriptor for managing diff results."""
 
@@ -46,3 +46,6 @@ class DiffResultDescriptor(object):
 
     def __set__(self, obj, value):
         self.instances[obj] = value
+
+    def __delete__(self, obj):
+        self.instances[obj] = None

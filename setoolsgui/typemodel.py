@@ -16,12 +16,10 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QTextCursor
 
-from setools.policyrep.exception import MLSDisabled
+from setools.exception import MLSDisabled
 
 from .details import DetailsPopup
 from .models import SEToolsTableModel
@@ -57,7 +55,7 @@ class TypeTableModel(SEToolsTableModel):
 
     """Table-based model for types."""
 
-    headers = defaultdict(str, {0: "Name", 1: "Attributes", 2: "Aliases", 3: "Permissive"})
+    headers = ["Name", "Attributes", "Aliases", "Permissive"]
 
     def data(self, index, role):
         if self.resultlist and index.isValid():
@@ -67,11 +65,11 @@ class TypeTableModel(SEToolsTableModel):
 
             if role == Qt.DisplayRole:
                 if col == 0:
-                    return str(item)
+                    return item.name
                 elif col == 1:
-                    return ", ".join(sorted(str(a) for a in item.attributes()))
+                    return ", ".join(sorted(a.name for a in item.attributes()))
                 elif col == 2:
-                    return ", ".join(sorted(str(a) for a in item.aliases()))
+                    return ", ".join(sorted(a for a in item.aliases()))
                 elif col == 3 and item.ispermissive:
                     return "Permissive"
 

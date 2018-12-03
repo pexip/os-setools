@@ -1,4 +1,5 @@
 # Copyright 2016, Tresys Technology, LLC
+# Copyright 2018, Chris PeBenito <pebenito@ieee.org>
 #
 # This file is part of SETools.
 #
@@ -16,21 +17,26 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from ..policyrep.exception import MLSDisabled
+from ..exception import MLSDisabled
 
 from .difference import SymbolWrapper, Wrapper
 from .mls import RangeWrapper
+from .roles import role_wrapper_factory
+from .types import type_wrapper_factory
+from .users import user_wrapper_factory
 
 
 class ContextWrapper(Wrapper):
 
     """Wrap contexts to allow comparisons."""
 
+    __slots__ = ("user", "role", "type_", "range_")
+
     def __init__(self, ctx):
         self.origin = ctx
-        self.user = SymbolWrapper(ctx.user)
-        self.role = SymbolWrapper(ctx.role)
-        self.type_ = SymbolWrapper(ctx.type_)
+        self.user = user_wrapper_factory(ctx.user)
+        self.role = role_wrapper_factory(ctx.role)
+        self.type_ = type_wrapper_factory(ctx.type_)
 
         try:
             self.range_ = RangeWrapper(ctx.range_)
@@ -39,6 +45,6 @@ class ContextWrapper(Wrapper):
 
     def __eq__(self, other):
         return self.user == other.user and \
-               self.role == other.role and \
-               self.type_ == other.type_ and \
-               self.range_ == other.range_
+            self.role == other.role and \
+            self.type_ == other.type_ and \
+            self.range_ == other.range_

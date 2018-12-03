@@ -15,22 +15,29 @@
 # You should have received a copy of the GNU General Public License
 # along with SETools.  If not, see <http://www.gnu.org/licenses/>.
 #
+import os
 import unittest
 
-from setools import SELinuxPolicy, DomainTransitionAnalysis
-from setools.policyrep.exception import InvalidType
-from setools.policyrep.typeattr import Type
+from setools import DomainTransitionAnalysis
+from setools import TERuletype as TERT
+from setools.exception import InvalidType
+from setools.policyrep import Type
 
 from . import mixins
+from .policyrep.util import compile_policy
 
 
 class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.p = SELinuxPolicy("tests/dta.conf")
+        cls.p = compile_policy("tests/dta.conf")
         cls.a = DomainTransitionAnalysis(cls.p)
         cls.a._build_graph()
+
+    @classmethod
+    def tearDownClass(cls):
+        os.unlink(cls.p.path)
 
     def test_000_graph_structure(self):
         """DTA: verify graph structure."""
@@ -45,7 +52,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         dyntrans100 = self.p.lookup_type("dyntrans100")
         bothtrans200 = self.p.lookup_type("bothtrans200")
 
-        edges = set(self.a.G.out_edges_iter())
+        edges = set(self.a.G.out_edges())
         self.assertSetEqual(set([(dyntrans100, bothtrans200),
                                  (start, dyntrans100),
                                  (start, trans1),
@@ -61,48 +68,48 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         e = self.p.lookup_type("bothtrans200_exec")
 
         # regular transition
-        r = self.a.G.edge[s][t]["transition"]
+        r = self.a.G.edges[s, t]["transition"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, t, "process", set(["transition", "dyntransition"]))
+        self.validate_rule(r[0], TERT.allow, s, t, "process", set(["transition", "dyntransition"]))
 
         # setexec perms
-        r = self.a.G.edge[s][t]["setexec"]
+        r = self.a.G.edges[s, t]["setexec"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, s, "process", set(["setexec", "setcurrent"]))
+        self.validate_rule(r[0], TERT.allow, s, s, "process", set(["setexec", "setcurrent"]))
 
         # exec perms
-        k = sorted(self.a.G.edge[s][t]["execute"].keys())
+        k = sorted(self.a.G.edges[s, t]["execute"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["execute"][e]
+        r = self.a.G.edges[s, t]["execute"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, e, "file", set(["execute"]))
+        self.validate_rule(r[0], TERT.allow, s, e, "file", set(["execute"]))
 
         # entrypoint perms
-        k = sorted(self.a.G.edge[s][t]["entrypoint"].keys())
+        k = sorted(self.a.G.edges[s, t]["entrypoint"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["entrypoint"][e]
+        r = self.a.G.edges[s, t]["entrypoint"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", t, e, "file", set(["entrypoint"]))
+        self.validate_rule(r[0], TERT.allow, t, e, "file", set(["entrypoint"]))
 
         # type_transition
-        k = sorted(self.a.G.edge[s][t]["type_transition"].keys())
+        k = sorted(self.a.G.edges[s, t]["type_transition"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["type_transition"][e]
+        r = self.a.G.edges[s, t]["type_transition"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "type_transition", s, e, "process", t)
+        self.validate_rule(r[0], TERT.type_transition, s, e, "process", t)
 
         # dynamic transition
-        r = self.a.G.edge[s][t]["dyntransition"]
+        r = self.a.G.edges[s, t]["dyntransition"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, t, "process", set(["transition", "dyntransition"]))
+        self.validate_rule(r[0], TERT.allow, s, t, "process", set(["transition", "dyntransition"]))
 
         # setcurrent
-        r = self.a.G.edge[s][t]["setcurrent"]
+        r = self.a.G.edges[s, t]["setcurrent"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, s, "process", set(["setexec", "setcurrent"]))
+        self.validate_rule(r[0], TERT.allow, s, s, "process", set(["setexec", "setcurrent"]))
 
     def test_010_dyntrans(self):
         """DTA: setcon() transition."""
@@ -111,34 +118,34 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         t = self.p.lookup_type("dyntrans100")
 
         # regular transition
-        r = self.a.G.edge[s][t]["transition"]
+        r = self.a.G.edges[s, t]["transition"]
         self.assertEqual(len(r), 0)
 
         # setexec perms
-        r = self.a.G.edge[s][t]["setexec"]
+        r = self.a.G.edges[s, t]["setexec"]
         self.assertEqual(len(r), 0)
 
         # exec perms
-        k = sorted(self.a.G.edge[s][t]["execute"].keys())
+        k = sorted(self.a.G.edges[s, t]["execute"].keys())
         self.assertEqual(len(k), 0)
 
         # entrypoint perms
-        k = sorted(self.a.G.edge[s][t]["entrypoint"].keys())
+        k = sorted(self.a.G.edges[s, t]["entrypoint"].keys())
         self.assertEqual(len(k), 0)
 
         # type_transition
-        k = sorted(self.a.G.edge[s][t]["type_transition"].keys())
+        k = sorted(self.a.G.edges[s, t]["type_transition"].keys())
         self.assertEqual(len(k), 0)
 
         # dynamic transition
-        r = self.a.G.edge[s][t]["dyntransition"]
+        r = self.a.G.edges[s, t]["dyntransition"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, t, "process", set(["dyntransition"]))
+        self.validate_rule(r[0], TERT.allow, s, t, "process", set(["dyntransition"]))
 
         # setcurrent
-        r = self.a.G.edge[s][t]["setcurrent"]
+        r = self.a.G.edges[s, t]["setcurrent"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, s, "process", set(["setcurrent"]))
+        self.validate_rule(r[0], TERT.allow, s, s, "process", set(["setcurrent"]))
 
     def test_020_trans(self):
         """DTA: type_transition transition."""
@@ -148,44 +155,44 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         e = self.p.lookup_type("trans1_exec")
 
         # regular transition
-        r = self.a.G.edge[s][t]["transition"]
+        r = self.a.G.edges[s, t]["transition"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, t, "process", set(["transition"]))
+        self.validate_rule(r[0], TERT.allow, s, t, "process", set(["transition"]))
 
         # setexec perms
-        r = self.a.G.edge[s][t]["setexec"]
+        r = self.a.G.edges[s, t]["setexec"]
         self.assertEqual(len(r), 0)
 
         # exec perms
-        k = sorted(self.a.G.edge[s][t]["execute"].keys())
+        k = sorted(self.a.G.edges[s, t]["execute"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["execute"][e]
+        r = self.a.G.edges[s, t]["execute"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, e, "file", set(["execute"]))
+        self.validate_rule(r[0], TERT.allow, s, e, "file", set(["execute"]))
 
         # entrypoint perms
-        k = sorted(self.a.G.edge[s][t]["entrypoint"].keys())
+        k = sorted(self.a.G.edges[s, t]["entrypoint"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["entrypoint"][e]
+        r = self.a.G.edges[s, t]["entrypoint"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", t, e, "file", set(["entrypoint"]))
+        self.validate_rule(r[0], TERT.allow, t, e, "file", set(["entrypoint"]))
 
         # type_transition
-        k = sorted(self.a.G.edge[s][t]["type_transition"].keys())
+        k = sorted(self.a.G.edges[s, t]["type_transition"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["type_transition"][e]
+        r = self.a.G.edges[s, t]["type_transition"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "type_transition", s, e, "process", t)
+        self.validate_rule(r[0], TERT.type_transition, s, e, "process", t)
 
         # dynamic transition
-        r = self.a.G.edge[s][t]["dyntransition"]
+        r = self.a.G.edges[s, t]["dyntransition"]
         self.assertEqual(len(r), 0)
 
         # setcurrent
-        r = self.a.G.edge[s][t]["setcurrent"]
+        r = self.a.G.edges[s, t]["setcurrent"]
         self.assertEqual(len(r), 0)
 
     def test_030_setexec(self):
@@ -196,41 +203,41 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         e = self.p.lookup_type("trans2_exec")
 
         # regular transition
-        r = self.a.G.edge[s][t]["transition"]
+        r = self.a.G.edges[s, t]["transition"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, t, "process", set(["transition"]))
+        self.validate_rule(r[0], TERT.allow, s, t, "process", set(["transition"]))
 
         # setexec perms
-        r = self.a.G.edge[s][t]["setexec"]
+        r = self.a.G.edges[s, t]["setexec"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, s, "process", set(["setexec"]))
+        self.validate_rule(r[0], TERT.allow, s, s, "process", set(["setexec"]))
 
         # exec perms
-        k = sorted(self.a.G.edge[s][t]["execute"].keys())
+        k = sorted(self.a.G.edges[s, t]["execute"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["execute"][e]
+        r = self.a.G.edges[s, t]["execute"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, e, "file", set(["execute"]))
+        self.validate_rule(r[0], TERT.allow, s, e, "file", set(["execute"]))
 
         # entrypoint perms
-        k = sorted(self.a.G.edge[s][t]["entrypoint"].keys())
+        k = sorted(self.a.G.edges[s, t]["entrypoint"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["entrypoint"][e]
+        r = self.a.G.edges[s, t]["entrypoint"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", t, e, "file", set(["entrypoint"]))
+        self.validate_rule(r[0], TERT.allow, t, e, "file", set(["entrypoint"]))
 
         # type_transition
-        k = sorted(self.a.G.edge[s][t]["type_transition"].keys())
+        k = sorted(self.a.G.edges[s, t]["type_transition"].keys())
         self.assertEqual(len(k), 0)
 
         # dynamic transition
-        r = self.a.G.edge[s][t]["dyntransition"]
+        r = self.a.G.edges[s, t]["dyntransition"]
         self.assertEqual(len(r), 0)
 
         # setcurrent
-        r = self.a.G.edge[s][t]["setcurrent"]
+        r = self.a.G.edges[s, t]["setcurrent"]
         self.assertEqual(len(r), 0)
 
     def test_040_two_entrypoint(self):
@@ -241,53 +248,53 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         e = [self.p.lookup_type("trans3_exec1"), self.p.lookup_type("trans3_exec2")]
 
         # regular transition
-        r = self.a.G.edge[s][t]["transition"]
+        r = self.a.G.edges[s, t]["transition"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, t, "process", set(["transition"]))
+        self.validate_rule(r[0], TERT.allow, s, t, "process", set(["transition"]))
 
         # setexec perms
-        r = self.a.G.edge[s][t]["setexec"]
+        r = self.a.G.edges[s, t]["setexec"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, s, "process", set(["setexec"]))
+        self.validate_rule(r[0], TERT.allow, s, s, "process", set(["setexec"]))
 
         # exec perms
-        k = sorted(self.a.G.edge[s][t]["execute"].keys())
+        k = sorted(self.a.G.edges[s, t]["execute"].keys())
         self.assertEqual(k, e)
 
-        r = self.a.G.edge[s][t]["execute"][e[0]]
+        r = self.a.G.edges[s, t]["execute"][e[0]]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, e[0], "file", set(["execute"]))
+        self.validate_rule(r[0], TERT.allow, s, e[0], "file", set(["execute"]))
 
-        r = self.a.G.edge[s][t]["execute"][e[1]]
+        r = self.a.G.edges[s, t]["execute"][e[1]]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, e[1], "file", set(["execute"]))
+        self.validate_rule(r[0], TERT.allow, s, e[1], "file", set(["execute"]))
 
         # entrypoint perms
-        k = sorted(self.a.G.edge[s][t]["entrypoint"].keys())
+        k = sorted(self.a.G.edges[s, t]["entrypoint"].keys())
         self.assertEqual(k, e)
 
-        r = self.a.G.edge[s][t]["entrypoint"][e[0]]
+        r = self.a.G.edges[s, t]["entrypoint"][e[0]]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", t, e[0], "file", set(["entrypoint"]))
+        self.validate_rule(r[0], TERT.allow, t, e[0], "file", set(["entrypoint"]))
 
-        r = self.a.G.edge[s][t]["entrypoint"][e[1]]
+        r = self.a.G.edges[s, t]["entrypoint"][e[1]]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", t, e[1], "file", set(["entrypoint"]))
+        self.validate_rule(r[0], TERT.allow, t, e[1], "file", set(["entrypoint"]))
 
         # type_transition
-        k = sorted(self.a.G.edge[s][t]["type_transition"].keys())
+        k = sorted(self.a.G.edges[s, t]["type_transition"].keys())
         self.assertEqual(k, [e[0]])
 
-        r = self.a.G.edge[s][t]["type_transition"][e[0]]
+        r = self.a.G.edges[s, t]["type_transition"][e[0]]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "type_transition", s, e[0], "process", t)
+        self.validate_rule(r[0], TERT.type_transition, s, e[0], "process", t)
 
         # dynamic transition
-        r = self.a.G.edge[s][t]["dyntransition"]
+        r = self.a.G.edges[s, t]["dyntransition"]
         self.assertEqual(len(r), 0)
 
         # setcurrent
-        r = self.a.G.edge[s][t]["setcurrent"]
+        r = self.a.G.edges[s, t]["setcurrent"]
         self.assertEqual(len(r), 0)
 
     def test_050_cond_type_trans(self):
@@ -298,44 +305,44 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         e = self.p.lookup_type("trans5_exec")
 
         # regular transition
-        r = self.a.G.edge[s][t]["transition"]
+        r = self.a.G.edges[s, t]["transition"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, t, "process", set(["transition"]))
+        self.validate_rule(r[0], TERT.allow, s, t, "process", set(["transition"]))
 
         # setexec perms
-        r = self.a.G.edge[s][t]["setexec"]
+        r = self.a.G.edges[s, t]["setexec"]
         self.assertEqual(len(r), 0)
 
         # exec perms
-        k = sorted(self.a.G.edge[s][t]["execute"].keys())
+        k = sorted(self.a.G.edges[s, t]["execute"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["execute"][e]
+        r = self.a.G.edges[s, t]["execute"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", s, e, "file", set(["execute"]))
+        self.validate_rule(r[0], TERT.allow, s, e, "file", set(["execute"]))
 
         # entrypoint perms
-        k = sorted(self.a.G.edge[s][t]["entrypoint"].keys())
+        k = sorted(self.a.G.edges[s, t]["entrypoint"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["entrypoint"][e]
+        r = self.a.G.edges[s, t]["entrypoint"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", t, e, "file", set(["entrypoint"]))
+        self.validate_rule(r[0], TERT.allow, t, e, "file", set(["entrypoint"]))
 
         # type_transition
-        k = sorted(self.a.G.edge[s][t]["type_transition"].keys())
+        k = sorted(self.a.G.edges[s, t]["type_transition"].keys())
         self.assertEqual(k, [e])
 
-        r = self.a.G.edge[s][t]["type_transition"][e]
+        r = self.a.G.edges[s, t]["type_transition"][e]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "type_transition", s, e, "process", t, cond="trans5")
+        self.validate_rule(r[0], TERT.type_transition, s, e, "process", t, cond="trans5")
 
         # dynamic transition
-        r = self.a.G.edge[s][t]["dyntransition"]
+        r = self.a.G.edges[s, t]["dyntransition"]
         self.assertEqual(len(r), 0)
 
         # setcurrent
-        r = self.a.G.edge[s][t]["setcurrent"]
+        r = self.a.G.edges[s, t]["setcurrent"]
         self.assertEqual(len(r), 0)
 
     def test_100_forward_subgraph_structure(self):
@@ -358,7 +365,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         dyntrans100 = self.p.lookup_type("dyntrans100")
         bothtrans200 = self.p.lookup_type("bothtrans200")
 
-        edges = set(self.a.subG.out_edges_iter())
+        edges = set(self.a.subG.out_edges())
         self.assertSetEqual(set([(dyntrans100, bothtrans200),
                                  (start, dyntrans100),
                                  (start, trans1),
@@ -386,7 +393,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         dyntrans100 = self.p.lookup_type("dyntrans100")
         bothtrans200 = self.p.lookup_type("bothtrans200")
 
-        edges = set(self.a.subG.out_edges_iter())
+        edges = set(self.a.subG.out_edges())
         self.assertSetEqual(set([(bothtrans200, dyntrans100),
                                  (dyntrans100, start),
                                  (trans1, start),
@@ -410,7 +417,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         dyntrans100 = self.p.lookup_type("dyntrans100")
         bothtrans200 = self.p.lookup_type("bothtrans200")
 
-        edges = set(self.a.subG.out_edges_iter())
+        edges = set(self.a.subG.out_edges())
         self.assertSetEqual(set([(dyntrans100, bothtrans200),
                                  (start, dyntrans100),
                                  (trans2, trans3),
@@ -433,7 +440,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         dyntrans100 = self.p.lookup_type("dyntrans100")
         bothtrans200 = self.p.lookup_type("bothtrans200")
 
-        edges = set(self.a.subG.out_edges_iter())
+        edges = set(self.a.subG.out_edges())
         self.assertSetEqual(set([(dyntrans100, bothtrans200),
                                  (start, dyntrans100),
                                  (start, trans1),
@@ -458,7 +465,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         dyntrans100 = self.p.lookup_type("dyntrans100")
         bothtrans200 = self.p.lookup_type("bothtrans200")
 
-        edges = set(self.a.subG.out_edges_iter())
+        edges = set(self.a.subG.out_edges())
         self.assertSetEqual(set([(dyntrans100, bothtrans200),
                                  (start, dyntrans100),
                                  (start, trans1),
@@ -483,7 +490,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         dyntrans100 = self.p.lookup_type("dyntrans100")
         bothtrans200 = self.p.lookup_type("bothtrans200")
 
-        edges = set(self.a.subG.out_edges_iter())
+        edges = set(self.a.subG.out_edges())
         self.assertSetEqual(set([(dyntrans100, bothtrans200),
                                  (start, dyntrans100),
                                  (start, trans1),
@@ -505,7 +512,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                 self.assertIsInstance(step.source, Type)
                 self.assertIsInstance(step.target, Type)
                 self.assertEqual(expected_path[stepnum], step.source)
-                self.assertEqual(expected_path[stepnum+1], step.target)
+                self.assertEqual(expected_path[stepnum + 1], step.target)
 
                 for r in step.transition:
                     self.assertIn("transition", r.perms)
@@ -520,7 +527,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                         self.assertIn("execute", r.perms)
 
                     for r in e.type_transition:
-                        self.assertEqual("type_transition", r.ruletype)
+                        self.assertEqual(TERT.type_transition, r.ruletype)
 
                 for r in step.setexec:
                     self.assertIn("setexec", r.perms)
@@ -546,7 +553,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                 self.assertIsInstance(step.source, Type)
                 self.assertIsInstance(step.target, Type)
                 self.assertEqual(expected_path[stepnum], step.source)
-                self.assertEqual(expected_path[stepnum+1], step.target)
+                self.assertEqual(expected_path[stepnum + 1], step.target)
 
                 for r in step.transition:
                     self.assertIn("transition", r.perms)
@@ -561,7 +568,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                         self.assertIn("execute", r.perms)
 
                     for r in e.type_transition:
-                        self.assertEqual("type_transition", r.ruletype)
+                        self.assertEqual(TERT.type_transition, r.ruletype)
 
                 for r in step.setexec:
                     self.assertIn("setexec", r.perms)
@@ -587,7 +594,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                 self.assertIsInstance(step.source, Type)
                 self.assertIsInstance(step.target, Type)
                 self.assertEqual(expected_path[stepnum], step.source)
-                self.assertEqual(expected_path[stepnum+1], step.target)
+                self.assertEqual(expected_path[stepnum + 1], step.target)
 
                 for r in step.transition:
                     self.assertIn("transition", r.perms)
@@ -602,7 +609,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                         self.assertIn("execute", r.perms)
 
                     for r in e.type_transition:
-                        self.assertEqual("type_transition", r.ruletype)
+                        self.assertEqual(TERT.type_transition, r.ruletype)
 
                 for r in step.setexec:
                     self.assertIn("setexec", r.perms)
@@ -639,7 +646,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                     self.assertIn("execute", r.perms)
 
                 for r in e.type_transition:
-                    self.assertEqual("type_transition", r.ruletype)
+                    self.assertEqual(TERT.type_transition, r.ruletype)
 
             for r in step.setexec:
                 self.assertIn("setexec", r.perms)
@@ -664,7 +671,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
             for stepnum, step in enumerate(path):
                 self.assertIsInstance(step.source, Type)
                 self.assertIsInstance(step.target, Type)
-                self.assertEqual(step.source, expected_path[stepnum+1])
+                self.assertEqual(step.source, expected_path[stepnum + 1])
                 self.assertEqual(step.target, expected_path[stepnum])
 
                 for r in step.transition:
@@ -680,7 +687,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                         self.assertIn("execute", r.perms)
 
                     for r in e.type_transition:
-                        self.assertEqual("type_transition", r.ruletype)
+                        self.assertEqual(TERT.type_transition, r.ruletype)
 
                 for r in step.setexec:
                     self.assertIn("setexec", r.perms)
@@ -705,7 +712,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
             for stepnum, step in enumerate(path):
                 self.assertIsInstance(step.source, Type)
                 self.assertIsInstance(step.target, Type)
-                self.assertEqual(step.source, expected_path[stepnum+1])
+                self.assertEqual(step.source, expected_path[stepnum + 1])
                 self.assertEqual(step.target, expected_path[stepnum])
 
                 for r in step.transition:
@@ -721,7 +728,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                         self.assertIn("execute", r.perms)
 
                     for r in e.type_transition:
-                        self.assertEqual("type_transition", r.ruletype)
+                        self.assertEqual(TERT.type_transition, r.ruletype)
 
                 for r in step.setexec:
                     self.assertIn("setexec", r.perms)
@@ -746,7 +753,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
             for stepnum, step in enumerate(path):
                 self.assertIsInstance(step.source, Type)
                 self.assertIsInstance(step.target, Type)
-                self.assertEqual(expected_path[stepnum+1], step.source)
+                self.assertEqual(expected_path[stepnum + 1], step.source)
                 self.assertEqual(expected_path[stepnum], step.target)
 
                 for r in step.transition:
@@ -762,7 +769,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                         self.assertIn("execute", r.perms)
 
                     for r in e.type_transition:
-                        self.assertEqual("type_transition", r.ruletype)
+                        self.assertEqual(TERT.type_transition, r.ruletype)
 
                 for r in step.setexec:
                     self.assertIn("setexec", r.perms)
@@ -799,7 +806,7 @@ class DomainTransitionAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                     self.assertIn("execute", r.perms)
 
                 for r in e.type_transition:
-                    self.assertEqual("type_transition", r.ruletype)
+                    self.assertEqual(TERT.type_transition, r.ruletype)
 
             for r in step.setexec:
                 self.assertIn("setexec", r.perms)

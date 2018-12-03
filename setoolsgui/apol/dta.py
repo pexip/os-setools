@@ -21,16 +21,19 @@ import logging
 
 from PyQt5.QtCore import pyqtSignal, Qt, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea, \
-                            QTreeWidgetItem
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, \
+    QTreeWidgetItem
 from setools import DomainTransitionAnalysis
 
 from ..logtosignal import LogHandlerToSignal
+from .analysistab import AnalysisTab
 from .excludetypes import ExcludeTypes
-from ..widget import SEToolsWidget
+from .exception import TabFieldError
+from .workspace import load_checkboxes, load_spinboxes, load_lineedits, load_textedits, \
+    save_checkboxes, save_spinboxes, save_lineedits, save_textedits
 
 
-class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
+class DomainTransitionAnalysisTab(AnalysisTab):
 
     """A domain transition analysis tab."""
 
@@ -50,7 +53,7 @@ class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
 
     def setupUi(self):
         self.log.debug("Initializing UI.")
-        self.load_ui("dta.ui")
+        self.load_ui("apol/dta.ui")
 
         # set up source/target autocompletion
         type_completion_list = [str(t) for t in self.policy.types()]
@@ -62,6 +65,7 @@ class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
         self.target.setCompleter(self.type_completion)
 
         # setup indications of errors on source/target/default
+        self.errors = set()
         self.orig_palette = self.source.palette()
         self.error_palette = self.source.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -151,14 +155,8 @@ class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
     #
     # Source criteria
     #
-    def set_source_error(self, error_text):
-        self.log.error("Source domain error: {0}".format(error_text))
-        self.source.setToolTip("Error: {0}".format(error_text))
-        self.source.setPalette(self.error_palette)
-
     def clear_source_error(self):
-        self.source.setToolTip("The source domain of the analysis.")
-        self.source.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.source, "The source domain of the analysis.")
 
     def set_source(self):
         try:
@@ -169,19 +167,14 @@ class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
             else:
                 self.query.source = None
         except Exception as ex:
-            self.set_source_error(ex)
+            self.log.error("Source domain error: {0}".format(str(ex)))
+            self.set_criteria_error(self.source, ex)
 
     #
     # Target criteria
     #
-    def set_target_error(self, error_text):
-        self.log.error("Target domain error: {0}".format(error_text))
-        self.target.setToolTip("Error: {0}".format(error_text))
-        self.target.setPalette(self.error_palette)
-
     def clear_target_error(self):
-        self.target.setToolTip("The target domain of the analysis.")
-        self.target.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.target, "The target domain of the analysis.")
 
     def set_target(self):
         try:
@@ -192,7 +185,8 @@ class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
             else:
                 self.query.target = None
         except Exception as ex:
-            self.set_target_error(ex)
+            self.log.error("Target domain error: {0}".format(str(ex)))
+            self.set_criteria_error(self.target, ex)
 
     #
     # Options
@@ -203,6 +197,36 @@ class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
 
     def reverse_toggled(self, value):
         self.query.reverse = value
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander", "all_paths",
+                                         "all_shortest_paths", "flows_in", "flows_out", "reverse"])
+        save_lineedits(self, settings, ["source", "target"])
+        save_spinboxes(self, settings, ["max_path_length", "limit_paths"])
+        save_textedits(self, settings, ["notes"])
+        settings["exclude"] = [str(t) for t in self.query.exclude]
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander", "all_paths",
+                                         "all_shortest_paths", "flows_in", "flows_out", "reverse"])
+        load_lineedits(self, settings, ["source", "target"])
+        load_spinboxes(self, settings, ["max_path_length", "limit_paths"])
+        load_textedits(self, settings, ["notes"])
+
+        try:
+            self.query.exclude = settings["exclude"]
+        except KeyError:
+            self.log.warning("Excluded types criteria missing from settings file.")
 
     #
     # Infoflow browser
@@ -293,14 +317,12 @@ class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
         # right now there is only one button.
         fail = False
         if self.source.isEnabled() and not self.query.source:
-            self.set_source_error("A source domain is required")
-            fail = True
+            self.set_criteria_error(self.source, "A source domain is required")
 
         if self.target.isEnabled() and not self.query.target:
-            self.set_target_error("A target domain is required.")
-            fail = True
+            self.set_criteria_error(self.target, "A target domain is required.")
 
-        if fail:
+        if self.errors:
             return
 
         for mode in [self.all_paths, self.all_shortest_paths, self.flows_in, self.flows_out]:
@@ -330,6 +352,19 @@ class DomainTransitionAnalysisTab(SEToolsWidget, QScrollArea):
                 self.results_frame.setCurrentIndex(0)
 
         self.busy.reset()
+
+
+def sort_transition(trans):
+    """Sort the rules of a transition in-place."""
+    trans.transition.sort()
+    trans.setexec.sort()
+    trans.entrypoints.sort()
+    trans.dyntransition.sort()
+    trans.setcurrent.sort()
+    for e in trans.entrypoints:
+        e.entrypoint.sort()
+        e.execute.sort()
+        e.type_transition.sort()
 
 
 def print_transition(renderer, trans):
@@ -434,6 +469,7 @@ class ResultsUpdater(QThread):
 
                 self.raw_line.emit("Step {0}: {1} -> {2}\n".format(stepnum, step.source,
                                                                    step.target))
+                sort_transition(step)
                 print_transition(self.raw_line.emit, step)
 
             if QThread.currentThread().isInterruptionRequested() or (i >= self.query.limit):
@@ -449,6 +485,7 @@ class ResultsUpdater(QThread):
         child_types = []
         for i, step in enumerate(transitions, start=1):
             self.raw_line.emit("Transition {0}: {1} -> {2}\n".format(i, step.source, step.target))
+            sort_transition(step)
             print_transition(self.raw_line.emit, step)
 
             # Generate results for flow browser
@@ -501,6 +538,8 @@ class BrowserUpdater(QThread):
         child_types = []
         for transnum, trans in enumerate(self.query.transitions(self.type_), start=1):
             # Generate results for browser
+            sort_transition(trans)
+
             if self.out:
                 child_types.append((trans.target, trans))
             else:

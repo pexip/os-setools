@@ -1,4 +1,5 @@
 # Copyright 2016, Tresys Technology, LLC
+# Copyright 2016, Chris PeBenito <pebenito@ieee.org>
 #
 # This file is part of SETools.
 #
@@ -21,16 +22,19 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
-from setools import PortconQuery
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
+from setools import PortconQuery, PortconProtocol
 
 from ..logtosignal import LogHandlerToSignal
 from ..portconmodel import PortconTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_textedits, load_comboboxes, \
+    save_checkboxes, save_lineedits, save_textedits, save_comboboxes
 
 
-class PortconQueryTab(SEToolsWidget, QScrollArea):
+class PortconQueryTab(AnalysisTab):
 
     """An portcon query."""
 
@@ -47,7 +51,7 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.portconquery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("portconquery.ui")
+        self.load_ui("apol/portconquery.ui")
 
         # set up user autocompletion
         user_completion_list = [str(u) for u in self.policy.users()]
@@ -74,6 +78,7 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
         self.type_.setCompleter(self.type_completion)
 
         # setup indications of errors on source/target/default
+        self.errors = set()
         self.orig_palette = self.type_.palette()
         self.error_palette = self.type_.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -82,6 +87,11 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
         self.clear_type_error()
         self.clear_role_error()
         self.clear_range_error()
+
+        # populate protocol list. This has empty string as
+        # the first item in the .ui file:
+        for i, e in enumerate(PortconProtocol, start=1):
+            self.protocol.insertItem(i, e.name.upper(), e)
 
         # set up results
         self.table_results_model = PortconTableModel(self)
@@ -146,8 +156,7 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
     # Ports criteria
     #
     def clear_ports_error(self):
-        self.ports.setToolTip("Match the ports.")
-        self.ports.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.ports, "Match the ports.")
 
     def set_ports(self):
         try:
@@ -155,8 +164,8 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
             if pending_ports:
                 try:
                     ports = [int(i) for i in pending_ports.split("-")]
-                except ValueError:
-                    raise ValueError("Enter a port number or range, e.g. 22 or 6000-6020")
+                except ValueError as ex:
+                    raise ValueError("Enter a port number or range, e.g. 22 or 6000-6020") from ex
 
                 if len(ports) == 2:
                     self.query.ports = ports
@@ -169,23 +178,20 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
 
         except Exception as ex:
             self.log.error("Ports error: {0}".format(ex))
-            self.ports.setToolTip("Error: " + str(ex))
-            self.ports.setPalette(self.error_palette)
+            self.set_criteria_error(self.ports, ex)
 
     #
     # User criteria
     #
     def clear_user_error(self):
-        self.user.setToolTip("Match the user of the context.")
-        self.user.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.user, "Match the user of the context.")
 
     def set_user(self):
         try:
             self.query.user = self.user.text()
         except Exception as ex:
             self.log.error("Context user error: {0}".format(ex))
-            self.user.setToolTip("Error: " + str(ex))
-            self.user.setPalette(self.error_palette)
+            self.set_criteria_error(self.user, ex)
 
     def set_user_regex(self, state):
         self.log.debug("Setting user_regex {0}".format(state))
@@ -197,16 +203,14 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
     # Role criteria
     #
     def clear_role_error(self):
-        self.role.setToolTip("Match the role of the context.")
-        self.role.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.role, "Match the role of the context.")
 
     def set_role(self):
         try:
             self.query.role = self.role.text()
         except Exception as ex:
             self.log.error("Context role error: {0}".format(ex))
-            self.role.setToolTip("Error: " + str(ex))
-            self.role.setPalette(self.error_palette)
+            self.set_criteria_error(self.role, ex)
 
     def set_role_regex(self, state):
         self.log.debug("Setting role_regex {0}".format(state))
@@ -218,16 +222,14 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
     # Type criteria
     #
     def clear_type_error(self):
-        self.type_.setToolTip("Match the type of the context.")
-        self.type_.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.type_, "Match the type of the context.")
 
     def set_type(self):
         try:
             self.query.type_ = self.type_.text()
         except Exception as ex:
             self.log.error("Context type error: {0}".format(ex))
-            self.type_.setToolTip("Error: " + str(ex))
-            self.type_.setPalette(self.error_palette)
+            self.set_criteria_error(self.type_, ex)
 
     def set_type_regex(self, state):
         self.log.debug("Setting type_regex {0}".format(state))
@@ -239,16 +241,42 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
     # Range criteria
     #
     def clear_range_error(self):
-        self.range_.setToolTip("Match the range of the context.")
-        self.range_.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.range_, "Match the range of the context.")
 
     def set_range(self):
         try:
             self.query.range_ = self.range_.text()
         except Exception as ex:
             self.log.info("Context range error: " + str(ex))
-            self.range_.setToolTip("Error: " + str(ex))
-            self.range_.setPalette(self.error_palette)
+            self.set_criteria_error(self.range_, ex)
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander", "ports_exact",
+                                         "ports_overlap", "ports_subset", "ports_superset",
+                                         "user_regex", "role_regex", "type_regex", "range_exact",
+                                         "range_overlap", "range_subset", "range_superset"])
+        save_lineedits(self, settings, ["ports", "user", "role", "type_", "range_"])
+        save_comboboxes(self, settings, ["protocol"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander", "ports_exact",
+                                         "ports_overlap", "ports_subset", "ports_superset",
+                                         "user_regex", "role_regex", "type_regex", "range_exact",
+                                         "range_overlap", "range_subset", "range_superset"])
+        load_lineedits(self, settings, ["ports", "user", "role", "type_", "range_"])
+        load_comboboxes(self, settings, ["protocol"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner
@@ -258,7 +286,7 @@ class PortconQueryTab(SEToolsWidget, QScrollArea):
         self.query.ports_overlap = self.ports_overlap.isChecked()
         self.query.ports_subset = self.ports_subset.isChecked()
         self.query.ports_superset = self.ports_superset.isChecked()
-        self.query.protocol = self.protocol.currentData(Qt.DisplayRole)
+        self.query.protocol = self.protocol.currentData(Qt.UserRole)
         self.query.range_overlap = self.range_overlap.isChecked()
         self.query.range_subset = self.range_subset.isChecked()
         self.query.range_superset = self.range_superset.isChecked()

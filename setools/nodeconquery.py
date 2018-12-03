@@ -1,4 +1,5 @@
 # Copyright 2014-2015, Tresys Technology, LLC
+# Copyright 2017, Chris PeBenito <pebenito@ieee.org>
 #
 # This file is part of SETools.
 #
@@ -16,15 +17,13 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-try:
-    import ipaddress
-except ImportError:  # pragma: no cover
-    pass
+import ipaddress
 
 import logging
 from socket import AF_INET, AF_INET6
 
 from .mixins import MatchContext
+from .policyrep import NodeconIPVersion
 from .query import PolicyQuery
 
 
@@ -75,12 +74,7 @@ class NodeconQuery(MatchContext, PolicyQuery):
     @ip_version.setter
     def ip_version(self, value):
         if value:
-            if not (value == AF_INET or value == AF_INET6):
-                raise ValueError(
-                    "The address family must be {0} for IPv4 or {1} for IPv6.".
-                    format(AF_INET, AF_INET6))
-
-            self._ip_version = value
+            self._ip_version = NodeconIPVersion.lookup(value)
         else:
             self._ip_version = None
 
@@ -91,10 +85,7 @@ class NodeconQuery(MatchContext, PolicyQuery):
     @network.setter
     def network(self, value):
         if value:
-            try:
-                self._network = ipaddress.ip_network(value)
-            except NameError:  # pragma: no cover
-                raise RuntimeError("Nodecon IP address/network functions require Python 3.3+.")
+            self._network = ipaddress.ip_network(value)
         else:
             self._network = None
 
@@ -106,38 +97,17 @@ class NodeconQuery(MatchContext, PolicyQuery):
         """Generator which yields all matching nodecons."""
         self.log.info("Generating nodecon results from {0.policy}".format(self))
         self.log.debug("Network: {0.network!r}, overlap: {0.network_overlap}".format(self))
-        self.log.debug("IP Version: {0.ip_version}".format(self))
+        self.log.debug("IP Version: {0.ip_version!r}".format(self))
         self._match_context_debug(self.log)
 
         for nodecon in self.policy.nodecons():
 
             if self.network:
-                try:
-                    netmask = ipaddress.ip_address(nodecon.netmask)
-                except NameError:  # pragma: no cover
-                    # Should never actually hit this since the self.network
-                    # setter raises the same exception.
-                    raise RuntimeError("Nodecon IP address/network functions require Python 3.3+.")
-
-                # Python 3.3's IPv6Network constructor does not support
-                # expanded netmasks, only CIDR numbers. Convert netmask
-                # into CIDR.
-                # This is Brian Kernighan's method for counting set bits.
-                # If the netmask happens to be invalid, this will
-                # not detect it.
-                CIDR = 0
-                int_netmask = int(netmask)
-                while int_netmask:
-                    int_netmask &= int_netmask - 1
-                    CIDR += 1
-
-                net = ipaddress.ip_network('{0}/{1}'.format(nodecon.address, CIDR))
-
                 if self.network_overlap:
-                    if not self.network.overlaps(net):
+                    if not self.network.overlaps(nodecon.network):
                         continue
                 else:
-                    if not net == self.network:
+                    if not nodecon.network == self.network:
                         continue
 
             if self.ip_version and self.ip_version != nodecon.ip_version:
