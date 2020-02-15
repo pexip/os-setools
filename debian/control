@@ -24,7 +24,7 @@ Homepage: https://github.com/TresysTechnology/setools/wiki
 VCS-Git: https://anonscm.debian.org/git/selinux/setools.git
 VCS-Browser: https://anonscm.debian.org/gitweb/?p=selinux/setools.git;a=summary
 X-Python3-Version: >= 3.3
-XS-Pexip-Upstream: http://ftp.debian.org/debian/ stretch
+XS-Pexip-Upstream: http://ftp.debian.org/debian/ buster
 
 Package: setools
 Architecture: linux-any
