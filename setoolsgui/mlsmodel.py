@@ -16,8 +16,6 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QTextCursor
 
@@ -70,7 +68,7 @@ class MLSComponentTableModel(SEToolsTableModel):
 
     """Table-based model for sensitivities and categories."""
 
-    headers = defaultdict(str, {0: "Name", 1: "Aliases"})
+    headers = ["Name", "Aliases"]
 
     def data(self, index, role):
         if self.resultlist and index.isValid():
@@ -80,9 +78,9 @@ class MLSComponentTableModel(SEToolsTableModel):
 
             if role == Qt.DisplayRole:
                 if col == 0:
-                    return str(item)
+                    return item.name
                 elif col == 1:
-                    return ", ".join(sorted(str(a) for a in item.aliases()))
+                    return ", ".join(sorted(a for a in item.aliases()))
 
             elif role == Qt.UserRole:
                 return item

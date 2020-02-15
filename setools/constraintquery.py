@@ -20,8 +20,9 @@ import logging
 import re
 
 from .descriptors import CriteriaDescriptor, CriteriaSetDescriptor
+from .exception import ConstraintUseError
 from .mixins import MatchObjClass, MatchPermission
-from .policyrep.exception import ConstraintUseError
+from .policyrep import ConstraintRuletype
 from .query import PolicyQuery
 from .util import match_in_set
 
@@ -64,7 +65,7 @@ class ConstraintQuery(MatchObjClass, MatchPermission, PolicyQuery):
                       be used on the user.
     """
 
-    ruletype = CriteriaSetDescriptor(lookup_function="validate_constraint_ruletype")
+    ruletype = CriteriaSetDescriptor(enum_class=ConstraintRuletype)
     user = CriteriaDescriptor("user_regex", "lookup_user")
     user_regex = False
     role = CriteriaDescriptor("role_regex", "lookup_role")
@@ -124,24 +125,24 @@ class ConstraintQuery(MatchObjClass, MatchPermission, PolicyQuery):
                     continue
 
             if self.role and not self._match_expr(
-                        c.roles,
-                        self.role,
-                        self.role_indirect,
-                        self.role_regex):
-                    continue
+                    c.expression.roles,
+                    self.role,
+                    self.role_indirect,
+                    self.role_regex):
+                continue
 
             if self.type_ and not self._match_expr(
-                        c.types,
-                        self.type_,
-                        self.type_indirect,
-                        self.type_regex):
-                    continue
+                    c.expression.types,
+                    self.type_,
+                    self.type_indirect,
+                    self.type_regex):
+                continue
 
             if self.user and not self._match_expr(
-                        c.users,
-                        self.user,
-                        False,
-                        self.user_regex):
-                    continue
+                    c.expression.users,
+                    self.user,
+                    False,
+                    self.user_regex):
+                continue
 
             yield c

@@ -21,16 +21,19 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
 from setools import InitialSIDQuery
 
 from ..logtosignal import LogHandlerToSignal
 from ..initsidmodel import InitialSIDTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_textedits, \
+    save_checkboxes, save_lineedits, save_textedits
 
 
-class InitialSIDQueryTab(SEToolsWidget, QScrollArea):
+class InitialSIDQueryTab(AnalysisTab):
 
     """An initial SID query."""
 
@@ -47,7 +50,7 @@ class InitialSIDQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.initsidquery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("initsidquery.ui")
+        self.load_ui("apol/initsidquery.ui")
 
         # set up user autocompletion
         user_completion_list = [str(u) for u in self.policy.users()]
@@ -74,6 +77,7 @@ class InitialSIDQueryTab(SEToolsWidget, QScrollArea):
         self.type_.setCompleter(self.type_completion)
 
         # setup indications of errors on source/target/default
+        self.errors = set()
         self.orig_palette = self.type_.palette()
         self.error_palette = self.type_.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -148,16 +152,14 @@ class InitialSIDQueryTab(SEToolsWidget, QScrollArea):
     # Name criteria
     #
     def clear_name_error(self):
-        self.name.setToolTip("Match the name.")
-        self.name.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.name, "Match the name.")
 
     def set_name(self):
         try:
             self.query.name = self.name.text()
         except Exception as ex:
             self.log.error("Name error: {0}".format(ex))
-            self.name.setToolTip("Error: " + str(ex))
-            self.name.setPalette(self.error_palette)
+            self.set_criteria_error(self.name, ex)
 
     def set_name_regex(self, state):
         self.log.debug("Setting name_regex {0}".format(state))
@@ -169,16 +171,14 @@ class InitialSIDQueryTab(SEToolsWidget, QScrollArea):
     # User criteria
     #
     def clear_user_error(self):
-        self.user.setToolTip("Match the user of the context.")
-        self.user.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.user, "Match the user of the context.")
 
     def set_user(self):
         try:
             self.query.user = self.user.text()
         except Exception as ex:
             self.log.error("Context user error: {0}".format(ex))
-            self.user.setToolTip("Error: " + str(ex))
-            self.user.setPalette(self.error_palette)
+            self.set_criteria_error(self.user, ex)
 
     def set_user_regex(self, state):
         self.log.debug("Setting user_regex {0}".format(state))
@@ -190,16 +190,14 @@ class InitialSIDQueryTab(SEToolsWidget, QScrollArea):
     # Role criteria
     #
     def clear_role_error(self):
-        self.role.setToolTip("Match the role of the context.")
-        self.role.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.role, "Match the role of the context.")
 
     def set_role(self):
         try:
             self.query.role = self.role.text()
         except Exception as ex:
             self.log.error("Context role error: {0}".format(ex))
-            self.role.setToolTip("Error: " + str(ex))
-            self.role.setPalette(self.error_palette)
+            self.set_criteria_error(self.role, ex)
 
     def set_role_regex(self, state):
         self.log.debug("Setting role_regex {0}".format(state))
@@ -211,16 +209,14 @@ class InitialSIDQueryTab(SEToolsWidget, QScrollArea):
     # Type criteria
     #
     def clear_type_error(self):
-        self.type_.setToolTip("Match the type of the context.")
-        self.type_.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.type_, "Match the type of the context.")
 
     def set_type(self):
         try:
             self.query.type_ = self.type_.text()
         except Exception as ex:
             self.log.error("Context type error: {0}".format(ex))
-            self.type_.setToolTip("Error: " + str(ex))
-            self.type_.setPalette(self.error_palette)
+            self.set_criteria_error(self.type_, ex)
 
     def set_type_regex(self, state):
         self.log.debug("Setting type_regex {0}".format(state))
@@ -232,16 +228,38 @@ class InitialSIDQueryTab(SEToolsWidget, QScrollArea):
     # Range criteria
     #
     def clear_range_error(self):
-        self.range_.setToolTip("Match the range of the context.")
-        self.range_.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.range_, "Match the range of the context.")
 
     def set_range(self):
         try:
             self.query.range_ = self.range_.text()
         except Exception as ex:
             self.log.info("Context range error: " + str(ex))
-            self.range_.setToolTip("Error: " + str(ex))
-            self.range_.setPalette(self.error_palette)
+            self.set_criteria_error(self.range_, ex)
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander", "name_regex",
+                                         "user_regex", "role_regex", "type_regex", "range_exact",
+                                         "range_overlap", "range_subset", "range_superset"])
+        save_lineedits(self, settings, ["name", "user", "role", "type_", "range_"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander", "name_regex",
+                                         "user_regex", "role_regex", "type_regex", "range_exact",
+                                         "range_overlap", "range_subset", "range_superset"])
+        load_lineedits(self, settings, ["name", "user", "role", "type_", "range_"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner

@@ -21,17 +21,21 @@ import logging
 import copy
 from collections import OrderedDict
 from errno import ENOENT
+from contextlib import suppress
+
+import pkg_resources
 
 from . import exception
 from . import policyrep
 from .descriptors import PermissionMapDescriptor
+from .policyrep import TERuletype
 
 infoflow_directions = ["r", "w", "b", "n", "u"]
 min_weight = 1
 max_weight = 10
 
 
-class PermissionMap(object):
+class PermissionMap:
 
     """Permission Map for information flow analysis."""
 
@@ -47,15 +51,10 @@ class PermissionMap(object):
         if permmapfile:
             self.load(permmapfile)
         else:
-            for path in ["data/", sys.prefix + "/share/setools/"]:
-                try:
-                    self.load(path + "perm_map")
-                    break
-                except (IOError, OSError) as err:
-                    if err.errno != ENOENT:
-                        raise
-            else:
-                raise RuntimeError("Unable to load default permission map.")
+            distro = pkg_resources.get_distribution("setools")
+            # pylint: disable=no-member
+            path = "{0}/setools/perm_map".format(distro.location)
+            self.load(path)
 
     def __str__(self):
         return self.permmapfile
@@ -67,6 +66,11 @@ class PermissionMap(object):
         newobj.permmapfile = self.permmapfile
         memo[id(self)] = newobj
         return newobj
+
+    def __iter__(self):
+        for cls in self.classes():
+            for mapping in self.perms(cls):
+                yield mapping
 
     def load(self, permmapfile):
         """
@@ -96,10 +100,10 @@ class PermissionMap(object):
                 if state == 1:
                     try:
                         num_classes = int(entry[0])
-                    except ValueError:
+                    except ValueError as ex:
                         raise exception.PermissionMapParseError(
                             "{0}:{1}:Invalid number of classes: {2}".
-                            format(permmapfile, line_num, entry[0]))
+                            format(permmapfile, line_num, entry[0])) from ex
 
                     if num_classes < 1:
                         raise exception.PermissionMapParseError(
@@ -118,10 +122,10 @@ class PermissionMap(object):
 
                     try:
                         num_perms = int(entry[2])
-                    except ValueError:
+                    except ValueError as ex:
                         raise exception.PermissionMapParseError(
                             "{0}:{1}:Invalid number of permissions: {2}".
-                            format(permmapfile, line_num, entry[2]))
+                            format(permmapfile, line_num, entry[2])) from ex
 
                     if num_perms < 1:
                         raise exception.PermissionMapParseError(
@@ -149,10 +153,10 @@ class PermissionMap(object):
 
                     try:
                         weight = int(entry[2])
-                    except ValueError:
+                    except ValueError as ex:
                         raise exception.PermissionMapParseError(
                             "{0}:{1}:Invalid permission weight: {2}".
-                            format(permmapfile, line_num, entry[2]))
+                            format(permmapfile, line_num, entry[2])) from ex
 
                     if not min_weight <= weight <= max_weight:
                         raise exception.PermissionMapParseError(
@@ -225,8 +229,7 @@ class PermissionMap(object):
         Yield:
         class       An object class name.
         """
-        for cls in self.permmap.keys():
-            yield cls
+        yield from self.permmap.keys()
 
     def perms(self, class_):
         """
@@ -241,8 +244,8 @@ class PermissionMap(object):
         try:
             for perm in self.permmap[class_].keys():
                 yield Mapping(self.permmap, class_, perm)
-        except KeyError:
-            raise exception.UnmappedClass("{0} is not mapped.".format(class_))
+        except KeyError as ex:
+            raise exception.UnmappedClass("{0} is not mapped.".format(class_)) from ex
 
     def mapping(self, class_, perm):
         """Retrieve a specific permission's mapping."""
@@ -315,10 +318,8 @@ class PermissionMap(object):
 
             perms = class_.perms
 
-            try:
+            with suppress(exception.NoCommon):
                 perms |= class_.common.perms
-            except policyrep.exception.NoCommon:
-                pass
 
             for perm_name in perms:
                 if perm_name not in self.permmap[class_name]:
@@ -342,7 +343,7 @@ class PermissionMap(object):
         read_weight = 0
         class_name = str(rule.tclass)
 
-        if rule.ruletype != 'allow':
+        if rule.ruletype != TERuletype.allow:
             raise exception.RuleTypeError("{0} rules cannot be used for calculating a weight".
                                           format(rule.ruletype))
 
@@ -417,7 +418,7 @@ def validate_enabled(enabled):
     return bool(enabled)
 
 
-class Mapping(object):
+class Mapping:
 
     """A mapping for a permission in the permission map."""
 

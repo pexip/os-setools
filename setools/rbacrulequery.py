@@ -21,7 +21,8 @@ import re
 
 from . import mixins, query
 from .descriptors import CriteriaDescriptor, CriteriaSetDescriptor
-from .policyrep.exception import InvalidType, RuleUseError
+from .exception import InvalidType, RuleUseError
+from .policyrep import RBACRuletype
 from .util import match_indirect_regex
 
 
@@ -55,7 +56,7 @@ class RBACRuleQuery(mixins.MatchObjClass, query.PolicyQuery):
                     be used on the default role.
     """
 
-    ruletype = CriteriaSetDescriptor(lookup_function="validate_rbac_ruletype")
+    ruletype = CriteriaSetDescriptor(enum_class=RBACRuletype)
     source = CriteriaDescriptor("source_regex", "lookup_role")
     source_regex = False
     source_indirect = True

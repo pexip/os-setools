@@ -72,6 +72,8 @@ class GenfsconWrapper(Wrapper):
 
     """Wrap genfscon rules to allow set operations."""
 
+    __slots__ = ("fs", "path", "filetype", "context")
+
     def __init__(self, rule):
         self.origin = rule
         self.fs = rule.fs
@@ -88,5 +90,5 @@ class GenfsconWrapper(Wrapper):
 
     def __eq__(self, other):
         return self.fs == other.fs and \
-               self.path == other.path and \
-               self.filetype == other.filetype
+            self.path == other.path and \
+            self.filetype == other.filetype

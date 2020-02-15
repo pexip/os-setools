@@ -21,17 +21,20 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
 from setools import UserQuery
 
 from ..logtosignal import LogHandlerToSignal
 from ..models import SEToolsListModel, invert_list_selection
 from ..usermodel import UserTableModel, user_detail
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_listviews, load_textedits, \
+    save_checkboxes, save_lineedits, save_listviews, save_textedits
 
 
-class UserQueryTab(SEToolsWidget, QScrollArea):
+class UserQueryTab(AnalysisTab):
 
     """User browser and query tab."""
 
@@ -48,7 +51,7 @@ class UserQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.userquery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("userquery.ui")
+        self.load_ui("apol/userquery.ui")
 
         # populate user list
         self.user_model = SEToolsListModel(self)
@@ -68,6 +71,7 @@ class UserQueryTab(SEToolsWidget, QScrollArea):
         self.table_results.sortByColumn(0, Qt.AscendingOrder)
 
         # setup indications of errors on level/range
+        self.errors = set()
         self.orig_palette = self.name.palette()
         self.error_palette = self.name.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -146,16 +150,14 @@ class UserQueryTab(SEToolsWidget, QScrollArea):
     # Name criteria
     #
     def clear_name_error(self):
-        self.name.setToolTip("Match the user name.")
-        self.name.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.name, "Match the user name.")
 
     def set_name(self):
         try:
             self.query.name = self.name.text()
         except Exception as ex:
             self.log.error("User name error: {0}".format(ex))
-            self.name.setToolTip("Error: " + str(ex))
-            self.name.setPalette(self.error_palette)
+            self.set_criteria_error(self.name, ex)
 
     def set_name_regex(self, state):
         self.log.debug("Setting name_regex {0}".format(state))
@@ -180,31 +182,55 @@ class UserQueryTab(SEToolsWidget, QScrollArea):
     # Default level criteria
     #
     def clear_level_error(self):
-        self.level.setToolTip("Match the default level of the user.")
-        self.level.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.level, "Match the default level of the user.")
 
     def set_level(self):
         try:
             self.query.level = self.level.text()
         except Exception as ex:
             self.log.info("Level criterion error: " + str(ex))
-            self.level.setToolTip("Error: " + str(ex))
-            self.level.setPalette(self.error_palette)
+            self.set_criteria_error(self.level, ex)
 
     #
     # Range criteria
     #
     def clear_range_error(self):
-        self.range_.setToolTip("Match the default range of the user.")
-        self.range_.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.range_, "Match the default range of the user.")
 
     def set_range(self):
         try:
             self.query.range_ = self.range_.text()
         except Exception as ex:
             self.log.info("Range criterion error: " + str(ex))
-            self.range_.setToolTip("Error: " + str(ex))
-            self.range_.setPalette(self.error_palette)
+            self.set_criteria_error(self.range_, ex)
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander", "name_regex",
+                                         "roles_any", "roles_equal", "level_exact", "level_dom",
+                                         "level_domby", "range_exact", "range_overlap",
+                                         "range_subset", "range_superset"])
+        save_lineedits(self, settings, ["name", "level", "range_"])
+        save_listviews(self, settings, ["roles"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander", "name_regex",
+                                         "roles_any", "roles_equal", "level_exact", "level_dom",
+                                         "level_domby", "range_exact", "range_overlap",
+                                         "range_subset", "range_superset"])
+        load_lineedits(self, settings, ["name", "level", "range_"])
+        load_listviews(self, settings, ["roles"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner

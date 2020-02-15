@@ -16,12 +16,10 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QTextCursor
 
-from setools.policyrep.exception import MLSDisabled
+from setools.exception import MLSDisabled
 
 from .details import DetailsPopup
 from .models import SEToolsTableModel
@@ -51,7 +49,7 @@ class RoleTableModel(SEToolsTableModel):
 
     """Table-based model for roles."""
 
-    headers = defaultdict(str, {0: "Name", 1: "Types"})
+    headers = ["Name", "Types"]
 
     def data(self, index, role):
         # There are two roles here.
@@ -64,9 +62,9 @@ class RoleTableModel(SEToolsTableModel):
 
             if role == Qt.DisplayRole:
                 if col == 0:
-                    return str(item)
+                    return item.name
                 elif col == 1:
-                    return ", ".join(sorted(str(t) for t in item.types()))
+                    return ", ".join(sorted(t.name for t in item.types()))
             elif role == Qt.UserRole:
                 # get the whole object
                 return item

@@ -52,7 +52,7 @@ class PermissionMapEditor(SEToolsWidget, QDialog):
         self.setupUi()
 
     def setupUi(self):
-        self.load_ui("permmap_editor.ui")
+        self.load_ui("apol/permmap_editor.ui")
 
         # set up class list
         self.class_model = SEToolsListModel(self)
@@ -138,9 +138,7 @@ class PermissionMapEditor(SEToolsWidget, QDialog):
         for mapping in self.widgets:
             mapping.close()
 
-        # in Python3 a .clear() function was added for lists
-        # keep this implementation for Python 2 compat
-        del self.widgets[:]
+        self.widgets.clear()
 
 
 index_to_setting = ["r", "w", "b", "n"]
@@ -172,7 +170,7 @@ class PermissionMapping(SEToolsWidget, QWidget):
         self.setupUi()
 
     def setupUi(self):
-        self.load_ui("permmapping.ui")
+        self.load_ui("apol/permmapping.ui")
 
         self.permission.setText(str(self.mapping.perm))
         self.weight.setValue(self.mapping.weight)

@@ -21,11 +21,13 @@
 import itertools
 import logging
 from collections import defaultdict, namedtuple
+from contextlib import suppress
 
 import networkx as nx
-from networkx.exception import NetworkXError, NetworkXNoPath
+from networkx.exception import NetworkXError, NetworkXNoPath, NodeNotFound
 
 from .descriptors import EdgeAttrDict, EdgeAttrList
+from .policyrep import TERuletype
 
 __all__ = ['DomainTransitionAnalysis']
 
@@ -45,7 +47,7 @@ entrypoint_output = namedtuple("entrypoints", ["name",
                                                "type_transition"])
 
 
-class DomainTransitionAnalysis(object):
+class DomainTransitionAnalysis:
 
     """Domain transition analysis."""
 
@@ -109,13 +111,11 @@ class DomainTransitionAnalysis(object):
 
         self.log.info("Generating one domain transition path from {0} to {1}...".format(s, t))
 
-        try:
-            yield self.__generate_steps(nx.shortest_path(self.subG, s, t))
-        except (NetworkXNoPath, NetworkXError):
-            # NetworkXError: the type is valid but not in graph, e.g. excluded
+        with suppress(NetworkXNoPath, NodeNotFound):
+            # NodeNotFound: the type is valid but not in graph, e.g. excluded
             # NetworkXNoPath: no paths or the target type is
             # not in the graph
-            pass
+            yield self.__generate_steps(nx.shortest_path(self.subG, s, t))
 
     def all_paths(self, source, target, maxlen=2):
         """
@@ -146,14 +146,12 @@ class DomainTransitionAnalysis(object):
         self.log.info("Generating all domain transition paths from {0} to {1}, max length {2}...".
                       format(s, t, maxlen))
 
-        try:
-            for path in nx.all_simple_paths(self.subG, s, t, maxlen):
-                yield self.__generate_steps(path)
-        except (NetworkXNoPath, NetworkXError):
-            # NetworkXError: the type is valid but not in graph, e.g. excluded
+        with suppress(NetworkXNoPath, NodeNotFound):
+            # NodeNotFound: the type is valid but not in graph, e.g. excluded
             # NetworkXNoPath: no paths or the target type is
             # not in the graph
-            pass
+            for path in nx.all_simple_paths(self.subG, s, t, maxlen):
+                yield self.__generate_steps(path)
 
     def all_shortest_paths(self, source, target):
         """
@@ -179,16 +177,12 @@ class DomainTransitionAnalysis(object):
         self.log.info("Generating all shortest domain transition paths from {0} to {1}...".
                       format(s, t))
 
-        try:
-            for path in nx.all_shortest_paths(self.subG, s, t):
-                yield self.__generate_steps(path)
-        except (NetworkXNoPath, NetworkXError, KeyError):
-            # NetworkXError: the type is valid but not in graph, e.g. excluded
+        with suppress(NetworkXNoPath, NodeNotFound):
+            # NodeNotFound: the type is valid but not in graph, e.g. excluded
             # NetworkXNoPath: no paths or the target type is
             # not in the graph
-            # KeyError: work around NetworkX bug
-            # when the source node is not in the graph
-            pass
+            for path in nx.all_shortest_paths(self.subG, s, t):
+                yield self.__generate_steps(path)
 
     def transitions(self, type_):
         """
@@ -212,8 +206,9 @@ class DomainTransitionAnalysis(object):
         self.log.info("Generating all domain transitions {1} {0}".
                       format(s, "in to" if self.reverse else "out from"))
 
-        try:
-            for source, target in self.subG.out_edges_iter(s):
+        with suppress(NetworkXError):
+            # NetworkXError: the type is valid but not in graph, e.g. excluded
+            for source, target in self.subG.out_edges(s):
                 edge = Edge(self.subG, source, target)
 
                 if self.reverse:
@@ -227,10 +222,6 @@ class DomainTransitionAnalysis(object):
                                   edge.setexec,
                                   edge.dyntransition,
                                   edge.setcurrent)
-
-        except NetworkXError:
-            # NetworkXError: the type is valid but not in graph, e.g. excluded
-            pass
 
     def get_stats(self):  # pragma: no cover
         """
@@ -379,7 +370,7 @@ class DomainTransitionAnalysis(object):
         type_trans = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
         for rule in self.policy.terules():
-            if rule.ruletype == "allow":
+            if rule.ruletype == TERuletype.allow:
                 if rule.tclass not in ["process", "file"]:
                     continue
 
@@ -421,7 +412,7 @@ class DomainTransitionAnalysis(object):
                         for s, t in itertools.product(rule.source.expand(), rule.target.expand()):
                             entrypoint[s][t].append(rule)
 
-            elif rule.ruletype == "type_transition":
+            elif rule.ruletype == TERuletype.type_transition:
                 if rule.tclass != "process":
                     continue
 
@@ -433,7 +424,7 @@ class DomainTransitionAnalysis(object):
         clear_transition = []
         clear_dyntransition = []
 
-        for s, t in self.G.edges_iter():
+        for s, t in self.G.edges():
             edge = Edge(self.G, s, t)
             invalid_trans = False
             invalid_dyntrans = False
@@ -451,6 +442,7 @@ class DomainTransitionAnalysis(object):
                     # TODO try to improve the
                     # efficiency in this loop
                     for m in match:
+                        # pylint: disable=unsupported-assignment-operation
                         if s in setexec or type_trans[s][m]:
                             # add key for each entrypoint
                             edge.entrypoint[m] += entrypoint[t][m]
@@ -509,7 +501,7 @@ class DomainTransitionAnalysis(object):
 
     def __remove_excluded_entrypoints(self):
         invalid_edges = []
-        for source, target in self.subG.edges_iter():
+        for source, target in self.subG.edges():
             edge = Edge(self.subG, source, target)
             entrypoints = set(edge.entrypoint)
             entrypoints.intersection_update(self.exclude)
@@ -522,13 +514,12 @@ class DomainTransitionAnalysis(object):
 
             for e in entrypoints:
                 # clear the entrypoint data
+                # pylint: disable=unsupported-delete-operation
                 del edge.entrypoint[e]
                 del edge.execute[e]
 
-                try:
+                with suppress(KeyError):  # setexec
                     del edge.type_transition[e]
-                except KeyError:  # setexec
-                    pass
 
             # cannot delete the edges while iterating over them
             if not edge.entrypoint and not edge.dyntransition:
@@ -564,7 +555,7 @@ class DomainTransitionAnalysis(object):
             nx.number_of_edges(self.subG)))
 
 
-class Edge(object):
+class Edge:
 
     """
     A graph edge.  Also used for returning domain transition steps.

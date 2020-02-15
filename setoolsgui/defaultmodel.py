@@ -16,7 +16,7 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
+from contextlib import suppress
 
 from PyQt5.QtCore import Qt
 
@@ -27,7 +27,7 @@ class DefaultTableModel(SEToolsTableModel):
 
     """Table-based model for default_*."""
 
-    headers = defaultdict(str, {0: "Rule Type", 1: "Class", 2: "Default", 3: "Default Range"})
+    headers = ["Rule Type", "Class", "Default", "Default Range"]
 
     def data(self, index, role):
         if self.resultlist and index.isValid():
@@ -37,16 +37,14 @@ class DefaultTableModel(SEToolsTableModel):
 
             if role == Qt.DisplayRole:
                 if col == 0:
-                    return item.ruletype
+                    return item.ruletype.name
                 elif col == 1:
-                    return str(item.tclass)
+                    return item.tclass.name
                 elif col == 2:
-                    return str(item.default)
+                    return item.default.name
                 elif col == 3:
-                    try:
-                        return str(item.default_range)
-                    except AttributeError:
-                        pass
+                    with suppress(AttributeError):
+                        return item.default_range.name
 
             elif role == Qt.UserRole:
                 return item

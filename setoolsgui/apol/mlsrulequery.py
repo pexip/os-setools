@@ -21,17 +21,20 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
 from setools import MLSRuleQuery
 
 from ..logtosignal import LogHandlerToSignal
 from ..models import SEToolsListModel, invert_list_selection
 from ..mlsrulemodel import MLSRuleTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_listviews, load_textedits, \
+    save_checkboxes, save_lineedits, save_listviews, save_textedits
 
 
-class MLSRuleQueryTab(SEToolsWidget, QScrollArea):
+class MLSRuleQueryTab(AnalysisTab):
 
     """An MLS rule query."""
 
@@ -48,7 +51,7 @@ class MLSRuleQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.mlsrulequery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("mlsrulequery.ui")
+        self.load_ui("apol/mlsrulequery.ui")
 
         # set up source/target autocompletion
         typeattr_completion_list = [str(t) for t in self.policy.types()]
@@ -61,6 +64,7 @@ class MLSRuleQueryTab(SEToolsWidget, QScrollArea):
         self.target.setCompleter(self.typeattr_completion)
 
         # setup indications of errors on source/target/default
+        self.errors = set()
         self.orig_palette = self.source.palette()
         self.error_palette = self.source.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -141,16 +145,14 @@ class MLSRuleQueryTab(SEToolsWidget, QScrollArea):
     #
 
     def clear_source_error(self):
-        self.source.setToolTip("Match the source type/attribute of the rule.")
-        self.source.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.source, "Match the source type/attribute of the rule.")
 
     def set_source(self):
         try:
             self.query.source = self.source.text()
         except Exception as ex:
             self.log.error("Source type/attribute error: {0}".format(ex))
-            self.source.setToolTip("Error: {0}".format(ex))
-            self.source.setPalette(self.error_palette)
+            self.set_criteria_error(self.source, ex)
 
     def set_source_regex(self, state):
         self.log.debug("Setting source_regex {0}".format(state))
@@ -163,16 +165,14 @@ class MLSRuleQueryTab(SEToolsWidget, QScrollArea):
     #
 
     def clear_target_error(self):
-        self.target.setToolTip("Match the target type/attribute of the rule.")
-        self.target.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.target, "Match the target type/attribute of the rule.")
 
     def set_target(self):
         try:
             self.query.target = self.target.text()
         except Exception as ex:
             self.log.error("Target type/attribute error: {0}".format(ex))
-            self.target.setToolTip("Error: {0}".format(ex))
-            self.target.setPalette(self.error_palette)
+            self.set_criteria_error(self.target, ex)
 
     def set_target_regex(self, state):
         self.log.debug("Setting target_regex {0}".format(state))
@@ -199,16 +199,42 @@ class MLSRuleQueryTab(SEToolsWidget, QScrollArea):
     #
 
     def clear_default_error(self):
-        self.default_range.setToolTip("Match the default type the rule.")
-        self.default_range.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.default_range, "Match the default type the rule.")
 
     def set_default_range(self):
         try:
             self.query.default = self.default_range.text()
         except Exception as ex:
             self.log.error("Default range error: {0}".format(ex))
-            self.default_range.setToolTip("Error: {0}".format(ex))
-            self.default_range.setPalette(self.error_palette)
+            self.set_criteria_error(self.default_range, ex)
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "range_transition",
+                                         "source_indirect", "source_regex",
+                                         "target_indirect", "target_regex"])
+        save_lineedits(self, settings, ["source", "target", "default_range"])
+        save_listviews(self, settings, ["tclass"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "range_transition",
+                                         "source_indirect", "source_regex",
+                                         "target_indirect", "target_regex"])
+        load_lineedits(self, settings, ["source", "target", "default_range"])
+        load_listviews(self, settings, ["tclass"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner

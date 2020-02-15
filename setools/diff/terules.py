@@ -1,4 +1,5 @@
 # Copyright 2015-2016, Tresys Technology, LLC
+# Copyright 2016, 2018, Chris PeBenito <pebenito@ieee.org>
 #
 # This file is part of SETools.
 #
@@ -18,12 +19,14 @@
 #
 from collections import defaultdict, namedtuple
 
-from ..policyrep import ioctlSet
-from ..policyrep.exception import RuleNotConditional, RuleUseError, TERuleNoFilename
+from ..exception import RuleNotConditional, RuleUseError, TERuleNoFilename
+from ..policyrep import IoctlSet, TERuletype
 
-from .conditional import ConditionalExprWrapper
+from .conditional import conditional_wrapper_factory
 from .descriptors import DiffResultDescriptor
-from .difference import Difference, SymbolWrapper, Wrapper
+from .difference import Difference, Wrapper
+from .types import type_wrapper_factory, type_or_attr_wrapper_factory
+from .objclass import class_wrapper_factory
 
 
 modified_avrule_record = namedtuple("modified_avrule", ["rule",
@@ -34,6 +37,29 @@ modified_avrule_record = namedtuple("modified_avrule", ["rule",
 modified_terule_record = namedtuple("modified_terule", ["rule", "added_default", "removed_default"])
 
 
+def _avrule_expand_generator(rule_list, WrapperClass):
+    """
+    Generator that yields wrapped, expanded, av(x) rules with
+    unioned permission sets.
+    """
+    items = dict()
+
+    for unexpanded_rule in rule_list:
+        for expanded_rule in unexpanded_rule.expand():
+            expanded_wrapped_rule = WrapperClass(expanded_rule)
+
+            # create a hash table (dict) with the first rule
+            # as the key and value.  Rules where permission sets should
+            # be unioned together have the same hash, so this will union
+            # the permissions together.
+            try:
+                items[expanded_wrapped_rule].perms |= expanded_wrapped_rule.perms
+            except KeyError:
+                items[expanded_wrapped_rule] = expanded_wrapped_rule
+
+    return items.keys()
+
+
 def av_diff_template(ruletype):
 
     """
@@ -42,6 +68,7 @@ def av_diff_template(ruletype):
     Parameters:
     ruletype    The rule type, e.g. "allow".
     """
+    ruletype = TERuletype.lookup(ruletype)
 
     def diff(self):
         """Generate the difference in rules between the policies."""
@@ -54,27 +81,29 @@ def av_diff_template(ruletype):
             self._create_te_rule_lists()
 
         added, removed, matched = self._set_diff(
-                self._expand_generator(self._left_te_rules[ruletype], AVRuleWrapper),
-                self._expand_generator(self._right_te_rules[ruletype], AVRuleWrapper))
+            _avrule_expand_generator(self._left_te_rules[ruletype], AVRuleWrapper),
+            _avrule_expand_generator(self._right_te_rules[ruletype], AVRuleWrapper),
+            unwrap=False)
 
         modified = []
         for left_rule, right_rule in matched:
             # Criteria for modified rules
             # 1. change to permissions
             added_perms, removed_perms, matched_perms = self._set_diff(left_rule.perms,
-                                                                       right_rule.perms)
+                                                                       right_rule.perms,
+                                                                       unwrap=False)
 
             # the final set comprehension is to avoid having lists
             # like [("perm1", "perm1"), ("perm2", "perm2")], as the
             # matched_perms return from _set_diff is a set of tuples
             if added_perms or removed_perms:
-                modified.append(modified_avrule_record(left_rule,
+                modified.append(modified_avrule_record(left_rule.origin,
                                                        added_perms,
                                                        removed_perms,
                                                        set(p[0] for p in matched_perms)))
 
-        setattr(self, "added_{0}s".format(ruletype), added)
-        setattr(self, "removed_{0}s".format(ruletype), removed)
+        setattr(self, "added_{0}s".format(ruletype), set(a.origin for a in added))
+        setattr(self, "removed_{0}s".format(ruletype), set(r.origin for r in removed))
         setattr(self, "modified_{0}s".format(ruletype), modified)
 
     return diff
@@ -88,6 +117,7 @@ def avx_diff_template(ruletype):
     Parameters:
     ruletype    The rule type, e.g. "allowxperm".
     """
+    ruletype = TERuletype.lookup(ruletype)
 
     def diff(self):
         """Generate the difference in rules between the policies."""
@@ -100,27 +130,29 @@ def avx_diff_template(ruletype):
             self._create_te_rule_lists()
 
         added, removed, matched = self._set_diff(
-                self._expand_generator(self._left_te_rules[ruletype], AVRuleXpermWrapper),
-                self._expand_generator(self._right_te_rules[ruletype], AVRuleXpermWrapper))
+            _avrule_expand_generator(self._left_te_rules[ruletype], AVRuleXpermWrapper),
+            _avrule_expand_generator(self._right_te_rules[ruletype], AVRuleXpermWrapper),
+            unwrap=False)
 
         modified = []
         for left_rule, right_rule in matched:
             # Criteria for modified rules
             # 1. change to permissions
             added_perms, removed_perms, matched_perms = self._set_diff(left_rule.perms,
-                                                                       right_rule.perms)
+                                                                       right_rule.perms,
+                                                                       unwrap=False)
 
             # the final set comprehension is to avoid having lists
             # like [("perm1", "perm1"), ("perm2", "perm2")], as the
             # matched_perms return from _set_diff is a set of tuples
             if added_perms or removed_perms:
-                modified.append(modified_avrule_record(left_rule,
-                                                       ioctlSet(added_perms),
-                                                       ioctlSet(removed_perms),
-                                                       ioctlSet(p[0] for p in matched_perms)))
+                modified.append(modified_avrule_record(left_rule.origin,
+                                                       IoctlSet(added_perms),
+                                                       IoctlSet(removed_perms),
+                                                       IoctlSet(p[0] for p in matched_perms)))
 
-        setattr(self, "added_{0}s".format(ruletype), added)
-        setattr(self, "removed_{0}s".format(ruletype), removed)
+        setattr(self, "added_{0}s".format(ruletype), set(a.origin for a in added))
+        setattr(self, "removed_{0}s".format(ruletype), set(r.origin for r in removed))
         setattr(self, "modified_{0}s".format(ruletype), modified)
 
     return diff
@@ -134,6 +166,7 @@ def te_diff_template(ruletype):
     Parameters:
     ruletype    The rule type, e.g. "type_transition".
     """
+    ruletype = TERuletype.lookup(ruletype)
 
     def diff(self):
         """Generate the difference in rules between the policies."""
@@ -146,14 +179,14 @@ def te_diff_template(ruletype):
             self._create_te_rule_lists()
 
         added, removed, matched = self._set_diff(
-                self._expand_generator(self._left_te_rules[ruletype], TERuleWrapper),
-                self._expand_generator(self._right_te_rules[ruletype], TERuleWrapper))
+            self._expand_generator(self._left_te_rules[ruletype], TERuleWrapper),
+            self._expand_generator(self._right_te_rules[ruletype], TERuleWrapper))
 
         modified = []
         for left_rule, right_rule in matched:
             # Criteria for modified rules
             # 1. change to default type
-            if SymbolWrapper(left_rule.default) != SymbolWrapper(right_rule.default):
+            if type_wrapper_factory(left_rule.default) != type_wrapper_factory(right_rule.default):
                 modified.append(modified_terule_record(left_rule,
                                                        right_rule.default,
                                                        left_rule.default))
@@ -294,16 +327,18 @@ class AVRuleWrapper(Wrapper):
 
     """Wrap access vector rules to allow set operations."""
 
+    __slots__ = ("source", "target", "tclass", "perms", "conditional", "conditional_block")
+
     def __init__(self, rule):
         self.origin = rule
-        self.ruletype = rule.ruletype
-        self.source = SymbolWrapper(rule.source)
-        self.target = SymbolWrapper(rule.target)
-        self.tclass = SymbolWrapper(rule.tclass)
+        self.source = type_or_attr_wrapper_factory(rule.source)
+        self.target = type_or_attr_wrapper_factory(rule.target)
+        self.tclass = class_wrapper_factory(rule.tclass)
+        self.perms = rule.perms
         self.key = hash(rule)
 
         try:
-            self.conditional = ConditionalExprWrapper(rule.conditional)
+            self.conditional = conditional_wrapper_factory(rule.conditional)
             self.conditional_block = rule.conditional_block
         except RuleNotConditional:
             self.conditional = None
@@ -319,23 +354,25 @@ class AVRuleWrapper(Wrapper):
         # because TERuleDifference groups rules by ruletype,
         # the ruletype always matches.
         return self.source == other.source and \
-               self.target == other.target and \
-               self.tclass == other.tclass and \
-               self.conditional == other.conditional and \
-               self.conditional_block == other.conditional_block
+            self.target == other.target and \
+            self.tclass == other.tclass and \
+            self.conditional == other.conditional and \
+            self.conditional_block == other.conditional_block
 
 
 class AVRuleXpermWrapper(Wrapper):
 
     """Wrap extended permission access vector rules to allow set operations."""
 
+    __slots__ = ("source", "target", "tclass", "xperm_type", "perms")
+
     def __init__(self, rule):
         self.origin = rule
-        self.ruletype = rule.ruletype
-        self.source = SymbolWrapper(rule.source)
-        self.target = SymbolWrapper(rule.target)
-        self.tclass = SymbolWrapper(rule.tclass)
+        self.source = type_or_attr_wrapper_factory(rule.source)
+        self.target = type_or_attr_wrapper_factory(rule.target)
+        self.tclass = class_wrapper_factory(rule.tclass)
         self.xperm_type = rule.xperm_type
+        self.perms = rule.perms
         self.key = hash(rule)
 
     def __hash__(self):
@@ -348,25 +385,26 @@ class AVRuleXpermWrapper(Wrapper):
         # because TERuleDifference groups rules by ruletype,
         # the ruletype always matches.
         return self.source == other.source and \
-               self.target == other.target and \
-               self.tclass == other.tclass and \
-               self.xperm_type == other.xperm_type
+            self.target == other.target and \
+            self.tclass == other.tclass and \
+            self.xperm_type == other.xperm_type
 
 
 class TERuleWrapper(Wrapper):
 
     """Wrap type_* rules to allow set operations."""
 
+    __slots__ = ("source", "target", "tclass", "conditional", "conditional_block", "filename")
+
     def __init__(self, rule):
         self.origin = rule
-        self.ruletype = rule.ruletype
-        self.source = SymbolWrapper(rule.source)
-        self.target = SymbolWrapper(rule.target)
-        self.tclass = SymbolWrapper(rule.tclass)
+        self.source = type_or_attr_wrapper_factory(rule.source)
+        self.target = type_or_attr_wrapper_factory(rule.target)
+        self.tclass = class_wrapper_factory(rule.tclass)
         self.key = hash(rule)
 
         try:
-            self.conditional = ConditionalExprWrapper(rule.conditional)
+            self.conditional = conditional_wrapper_factory(rule.conditional)
             self.conditional_block = rule.conditional_block
         except RuleNotConditional:
             self.conditional = None
@@ -387,8 +425,8 @@ class TERuleWrapper(Wrapper):
         # because TERuleDifference groups rules by ruletype,
         # the ruletype always matches.
         return self.source == other.source and \
-               self.target == other.target and \
-               self.tclass == other.tclass and \
-               self.conditional == other.conditional and \
-               self.conditional_block == other.conditional_block and \
-               self.filename == self.filename
+            self.target == other.target and \
+            self.tclass == other.tclass and \
+            self.conditional == other.conditional and \
+            self.conditional_block == other.conditional_block and \
+            self.filename == self.filename
