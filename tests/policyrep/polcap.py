@@ -15,17 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with SETools.  If not, see <http://www.gnu.org/licenses/>.
 #
+# Until this is fixed for cython:
+# pylint: disable=undefined-variable
 import unittest
-
-try:
-    from unittest.mock import Mock
-except ImportError:
-    from mock import Mock
-
-from setools.policyrep import qpol
-from setools.policyrep.polcap import polcap_factory
+from unittest.mock import Mock
 
 
+@unittest.skip("Needs to be reworked for cython")
 class PolCapTest(unittest.TestCase):
 
     @staticmethod

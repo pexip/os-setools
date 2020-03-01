@@ -22,7 +22,7 @@ from collections import namedtuple
 modified_item_record = namedtuple("modified_item", ["left", "right"])
 
 
-class Difference(object):
+class Difference:
 
     """Base class for all policy differences."""
 
@@ -72,7 +72,7 @@ class Difference(object):
                 yield Wrapper(expanded_rule)
 
     @staticmethod
-    def _set_diff(left, right, key=None):
+    def _set_diff(left, right, key=None, unwrap=True):
         """
         Standard diff of two sets.
 
@@ -114,28 +114,29 @@ class Difference(object):
             "Matched items assertion failure (this is an SETools bug), {0} != {1}". \
             format(len(left_matched_items), len(right_matched_items))
 
-        for l, r in zip(left_matched_items, right_matched_items):
-            assert l == r, \
-                "Matched items assertion failure (this is an SETools bug), {0} != {1}".format(l, r)
+        for left, right in zip(left_matched_items, right_matched_items):
+            assert left == right, \
+                "Matched items assertion failure (this is an SETools bug), {0} != {1}".format(
+                    left, right)
 
-            matched_items.add((l, r))
+            matched_items.add((left, right))
 
-        try:
-            # unwrap the objects
+        if unwrap:
             return set(i.origin for i in added_items), \
-                   set(i.origin for i in removed_items), \
-                   set((l.origin, r.origin) for (l, r) in matched_items)
-        except AttributeError:
+                set(i.origin for i in removed_items), \
+                set((left.origin, right.origin) for (left, right) in matched_items)
+        else:
             return added_items, removed_items, matched_items
 
 
-class Wrapper(object):
+class Wrapper:
 
     """Base class for policy object wrappers."""
 
-    origin = None
+    __slots__ = ("origin", "key")
 
     def __repr__(self):
+        # pylint: disable=no-member
         return "<{0.__class__.__name__}(Wrapping {1})>".format(self, repr(self.origin))
 
     def __hash__(self):
@@ -159,12 +160,15 @@ class SymbolWrapper(Wrapper):
     on its name.
     """
 
+    __slots__ = ("name")
+
     def __init__(self, symbol):
         self.origin = symbol
         self.name = str(symbol)
+        self.key = hash(self.name)
 
     def __hash__(self):
-        return hash(self.name)
+        return self.key
 
     def __lt__(self, other):
         return self.name < other.name

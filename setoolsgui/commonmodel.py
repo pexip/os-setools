@@ -16,12 +16,10 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QTextCursor
 
-from setools.policyrep.exception import NoCommon
+from setools.exception import NoCommon
 
 from .details import DetailsPopup
 from .models import SEToolsTableModel
@@ -49,7 +47,7 @@ class CommonTableModel(SEToolsTableModel):
 
     """Table-based model for common permission sets."""
 
-    headers = defaultdict(str, {0: "Name", 1: "Permissions"})
+    headers = ["Name", "Permissions"]
 
     def data(self, index, role):
         if self.resultlist and index.isValid():
@@ -59,9 +57,9 @@ class CommonTableModel(SEToolsTableModel):
 
             if role == Qt.DisplayRole:
                 if col == 0:
-                    return str(item)
+                    return item.name
                 elif col == 1:
-                    return ", ".join(sorted(str(p) for p in item.perms))
+                    return ", ".join(sorted(item.perms))
 
             elif role == Qt.UserRole:
                 return item

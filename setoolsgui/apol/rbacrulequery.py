@@ -21,17 +21,20 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
 from setools import RBACRuleQuery
 
 from ..logtosignal import LogHandlerToSignal
 from ..models import SEToolsListModel, invert_list_selection
 from ..rbacrulemodel import RBACRuleTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_listviews, load_textedits, \
+    save_checkboxes, save_lineedits, save_listviews, save_textedits
 
 
-class RBACRuleQueryTab(SEToolsWidget, QScrollArea):
+class RBACRuleQueryTab(AnalysisTab):
 
     """A RBAC rule query."""
 
@@ -48,7 +51,7 @@ class RBACRuleQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.rbacrulequery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("rbacrulequery.ui")
+        self.load_ui("apol/rbacrulequery.ui")
 
         # set up role autocompletion (source, default)
         role_completion_list = [str(r) for r in self.policy.roles()]
@@ -71,6 +74,7 @@ class RBACRuleQueryTab(SEToolsWidget, QScrollArea):
         self.target.setCompleter(self.roletype_completion)
 
         # setup indications of errors on source/target/default
+        self.errors = set()
         self.orig_palette = self.source.palette()
         self.error_palette = self.source.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -154,16 +158,14 @@ class RBACRuleQueryTab(SEToolsWidget, QScrollArea):
     #
 
     def clear_source_error(self):
-        self.source.setToolTip("Match the source role of the rule.")
-        self.source.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.source, "Match the source role of the rule.")
 
     def set_source(self):
         try:
             self.query.source = self.source.text()
         except Exception as ex:
             self.log.error("Source role error: {0}".format(ex))
-            self.source.setToolTip("Error: " + str(ex))
-            self.source.setPalette(self.error_palette)
+            self.set_criteria_error(self.source, ex)
 
     def set_source_regex(self, state):
         self.log.debug("Setting source_regex {0}".format(state))
@@ -176,16 +178,14 @@ class RBACRuleQueryTab(SEToolsWidget, QScrollArea):
     #
 
     def clear_target_error(self):
-        self.target.setToolTip("Match the target role/type of the rule.")
-        self.target.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.target, "Match the target role/type of the rule.")
 
     def set_target(self):
         try:
             self.query.target = self.target.text()
         except Exception as ex:
             self.log.error("Target type/role error: {0}".format(ex))
-            self.target.setToolTip("Error: " + str(ex))
-            self.target.setPalette(self.error_palette)
+            self.set_criteria_error(self.target, ex)
 
     def set_target_regex(self, state):
         self.log.debug("Setting target_regex {0}".format(state))
@@ -212,8 +212,7 @@ class RBACRuleQueryTab(SEToolsWidget, QScrollArea):
     #
 
     def clear_default_error(self):
-        self.default_role.setToolTip("Match the default role the rule.")
-        self.default_role.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.default_role, "Match the default role the rule.")
 
     def set_default_role(self):
         self.query.default_regex = self.default_regex.isChecked()
@@ -222,14 +221,43 @@ class RBACRuleQueryTab(SEToolsWidget, QScrollArea):
             self.query.default = self.default_role.text()
         except Exception as ex:
             self.log.error("Default role error: {0}".format(ex))
-            self.default_role.setToolTip("Error: " + str(ex))
-            self.default_role.setPalette(self.error_palette)
+            self.set_criteria_error(self.default_role, ex)
 
     def set_default_regex(self, state):
         self.log.debug("Setting default_regex {0}".format(state))
         self.query.default_regex = state
         self.clear_default_error()
         self.set_default_role()
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "allow", "role_transition",
+                                         "source_indirect", "source_regex",
+                                         "target_indirect", "target_regex",
+                                         "default_regex"])
+        save_lineedits(self, settings, ["source", "target", "default_role"])
+        save_listviews(self, settings, ["tclass"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "allow", "role_transition",
+                                         "source_indirect", "source_regex",
+                                         "target_indirect", "target_regex",
+                                         "default_regex"])
+        load_lineedits(self, settings, ["source", "target", "default_role"])
+        load_listviews(self, settings, ["tclass"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner

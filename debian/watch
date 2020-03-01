@@ -1,3 +1,3 @@
 version=3
 opts="filenamemangle=s/.+\/v?(\d\S*)\.tar\.gz/setools-$1\.tar\.gz/,uversionmangle=s/(\d+)-*(rc|beta|alpha)/$1~$2/" \
-  https://github.com/TresysTechnology/setools/tags .*/v?(\d\S*)\.tar\.gz
+  https://github.com/SELinuxProject/setools/tags .*/v?(\d\S*)\.tar\.gz

@@ -15,14 +15,17 @@
 # You should have received a copy of the GNU General Public License
 # along with SETools.  If not, see <http://www.gnu.org/licenses/>.
 #
+import os
 import unittest
 
-from setools import SELinuxPolicy, InfoFlowAnalysis
+from setools import InfoFlowAnalysis
+from setools import TERuletype as TERT
+from setools.exception import InvalidType
 from setools.permmap import PermissionMap
-from setools.policyrep.exception import InvalidType
-from setools.policyrep.typeattr import Type
+from setools.policyrep import Type
 
 from . import mixins
+from .policyrep.util import compile_policy
 
 
 # Note: the testing for having correct rules on every edge is only
@@ -35,9 +38,13 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.p = SELinuxPolicy("tests/infoflow.conf")
+        cls.p = compile_policy("tests/infoflow.conf")
         cls.m = PermissionMap("tests/perm_map")
         cls.a = InfoFlowAnalysis(cls.p, cls.m)
+
+    @classmethod
+    def tearDownClass(cls):
+        os.unlink(cls.p.path)
 
     def test_001_full_graph(self):
         """Information flow analysis full graph."""
@@ -56,12 +63,12 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         node8 = self.p.lookup_type("node8")
         node9 = self.p.lookup_type("node9")
 
-        nodes = set(self.a.G.nodes_iter())
+        nodes = set(self.a.G.nodes())
         self.assertSetEqual(set([disconnected1, disconnected2, node1,
                                  node2, node3, node4, node5,
                                  node6, node7, node8, node9]), nodes)
 
-        edges = set(self.a.G.out_edges_iter())
+        edges = set(self.a.G.out_edges())
         self.assertSetEqual(set([(disconnected1, disconnected2),
                                  (disconnected2, disconnected1),
                                  (node1, node2),
@@ -75,56 +82,56 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
                                  (node8, node9),
                                  (node9, node8)]), edges)
 
-        r = self.a.G.edge[disconnected1][disconnected2]["rules"]
+        r = self.a.G.edges[disconnected1, disconnected2]["rules"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "disconnected1", "disconnected2", "infoflow2",
+        self.validate_rule(r[0], TERT.allow, "disconnected1", "disconnected2", "infoflow2",
                            set(["super"]))
 
-        r = self.a.G.edge[disconnected2][disconnected1]["rules"]
+        r = self.a.G.edges[disconnected2, disconnected1]["rules"]
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "disconnected1", "disconnected2", "infoflow2",
+        self.validate_rule(r[0], TERT.allow, "disconnected1", "disconnected2", "infoflow2",
                            set(["super"]))
 
-        r = sorted(self.a.G.edge[node1][node2]["rules"])
+        r = sorted(self.a.G.edges[node1, node2]["rules"])
         self.assertEqual(len(r), 2)
-        self.validate_rule(r[0], "allow", "node1", "node2", "infoflow", set(["med_w"]))
-        self.validate_rule(r[1], "allow", "node2", "node1", "infoflow", set(["hi_r"]))
+        self.validate_rule(r[0], TERT.allow, "node1", "node2", "infoflow", set(["med_w"]))
+        self.validate_rule(r[1], TERT.allow, "node2", "node1", "infoflow", set(["hi_r"]))
 
-        r = sorted(self.a.G.edge[node1][node3]["rules"])
+        r = sorted(self.a.G.edges[node1, node3]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node3", "node1", "infoflow", set(["low_r", "med_r"]))
+        self.validate_rule(r[0], TERT.allow, "node3", "node1", "infoflow", set(["low_r", "med_r"]))
 
-        r = sorted(self.a.G.edge[node2][node4]["rules"])
+        r = sorted(self.a.G.edges[node2, node4]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node2", "node4", "infoflow", set(["hi_w"]))
+        self.validate_rule(r[0], TERT.allow, "node2", "node4", "infoflow", set(["hi_w"]))
 
-        r = sorted(self.a.G.edge[node3][node5]["rules"])
+        r = sorted(self.a.G.edges[node3, node5]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node5", "node3", "infoflow", set(["low_r"]))
+        self.validate_rule(r[0], TERT.allow, "node5", "node3", "infoflow", set(["low_r"]))
 
-        r = sorted(self.a.G.edge[node4][node6]["rules"])
+        r = sorted(self.a.G.edges[node4, node6]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node4", "node6", "infoflow2", set(["hi_w"]))
+        self.validate_rule(r[0], TERT.allow, "node4", "node6", "infoflow2", set(["hi_w"]))
 
-        r = sorted(self.a.G.edge[node5][node8]["rules"])
+        r = sorted(self.a.G.edges[node5, node8]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node5", "node8", "infoflow2", set(["hi_w"]))
+        self.validate_rule(r[0], TERT.allow, "node5", "node8", "infoflow2", set(["hi_w"]))
 
-        r = sorted(self.a.G.edge[node6][node5]["rules"])
+        r = sorted(self.a.G.edges[node6, node5]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node5", "node6", "infoflow", set(["med_r"]))
+        self.validate_rule(r[0], TERT.allow, "node5", "node6", "infoflow", set(["med_r"]))
 
-        r = sorted(self.a.G.edge[node6][node7]["rules"])
+        r = sorted(self.a.G.edges[node6, node7]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node6", "node7", "infoflow", set(["hi_w"]))
+        self.validate_rule(r[0], TERT.allow, "node6", "node7", "infoflow", set(["hi_w"]))
 
-        r = sorted(self.a.G.edge[node8][node9]["rules"])
+        r = sorted(self.a.G.edges[node8, node9]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node8", "node9", "infoflow2", set(["super"]))
+        self.validate_rule(r[0], TERT.allow, "node8", "node9", "infoflow2", set(["super"]))
 
-        r = sorted(self.a.G.edge[node9][node8]["rules"])
+        r = sorted(self.a.G.edges[node9, node8]["rules"])
         self.assertEqual(len(r), 1)
-        self.validate_rule(r[0], "allow", "node8", "node9", "infoflow2", set(["super"]))
+        self.validate_rule(r[0], TERT.allow, "node8", "node9", "infoflow2", set(["super"]))
 
     def test_100_minimum_3(self):
         """Information flow analysis with minimum weight 3."""
@@ -150,7 +157,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         # assume NetworkX copies into the subgraph
         # correctly.
 
-        edges = set(self.a.subG.out_edges_iter())
+        edges = set(self.a.subG.out_edges())
         self.assertSetEqual(set([(disconnected1, disconnected2),
                                  (disconnected2, disconnected1),
                                  (node1, node2),
@@ -186,7 +193,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         # assume NetworkX copies into the subgraph
         # correctly.
 
-        edges = set(self.a.subG.out_edges_iter())
+        edges = set(self.a.subG.out_edges())
         self.assertSetEqual(set([(disconnected1, disconnected2),
                                  (disconnected2, disconnected1),
                                  (node1, node2),
@@ -214,7 +221,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         self.assertEqual(step.source, "node1")
         self.assertEqual(step.target, "node2")
         for r in steps[0].rules:
-            self.assertEqual("allow", r.ruletype)
+            self.assertEqual(TERT.allow, r.ruletype)
 
         step = steps[1]
         self.assertIsInstance(step.source, Type)
@@ -222,7 +229,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         self.assertEqual(step.source, "node2")
         self.assertEqual(step.target, "node4")
         for r in step.rules:
-            self.assertEqual("allow", r.ruletype)
+            self.assertEqual(TERT.allow, r.ruletype)
 
     def test_301_all_shortest_paths(self):
         """Information flow analysis: all shortest paths output"""
@@ -241,7 +248,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         self.assertEqual(step.source, "node1")
         self.assertEqual(step.target, "node2")
         for r in steps[0].rules:
-            self.assertEqual("allow", r.ruletype)
+            self.assertEqual(TERT.allow, r.ruletype)
 
         step = steps[1]
         self.assertIsInstance(step.source, Type)
@@ -249,7 +256,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         self.assertEqual(step.source, "node2")
         self.assertEqual(step.target, "node4")
         for r in step.rules:
-            self.assertEqual("allow", r.ruletype)
+            self.assertEqual(TERT.allow, r.ruletype)
 
     def test_302_shortest_path(self):
         """Information flow analysis: shortest path output"""
@@ -268,7 +275,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         self.assertEqual(step.source, "node1")
         self.assertEqual(step.target, "node2")
         for r in steps[0].rules:
-            self.assertEqual("allow", r.ruletype)
+            self.assertEqual(TERT.allow, r.ruletype)
 
         step = steps[1]
         self.assertIsInstance(step.source, Type)
@@ -276,7 +283,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
         self.assertEqual(step.source, "node2")
         self.assertEqual(step.target, "node4")
         for r in step.rules:
-            self.assertEqual("allow", r.ruletype)
+            self.assertEqual(TERT.allow, r.ruletype)
 
     def test_303_infoflows_out(self):
         """Information flow analysis: flows out of a type"""
@@ -288,7 +295,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
             self.assertIsInstance(flow.target, Type)
             self.assertEqual(flow.source, "node6")
             for r in flow.rules:
-                self.assertEqual("allow", r.ruletype)
+                self.assertEqual(TERT.allow, r.ruletype)
 
     def test_304_infoflows_in(self):
         """Information flow analysis: flows in to a type"""
@@ -300,7 +307,7 @@ class InfoFlowAnalysisTest(mixins.ValidateRule, unittest.TestCase):
             self.assertIsInstance(flow.target, Type)
             self.assertEqual(flow.target, "node8")
             for r in flow.rules:
-                self.assertEqual("allow", r.ruletype)
+                self.assertEqual(TERT.allow, r.ruletype)
 
     def test_900_set_exclude_invalid_type(self):
         """Information flow analysis: set invalid excluded type."""

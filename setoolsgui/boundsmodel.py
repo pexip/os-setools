@@ -16,8 +16,6 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-
 from PyQt5.QtCore import Qt
 
 from .models import SEToolsTableModel
@@ -27,7 +25,7 @@ class BoundsTableModel(SEToolsTableModel):
 
     """Table-based model for *bounds."""
 
-    headers = defaultdict(str, {0: "Rule Type", 1: "Parent", 2: "Child"})
+    headers = ["Rule Type", "Parent", "Child"]
 
     def data(self, index, role):
         if self.resultlist and index.isValid():
@@ -37,11 +35,11 @@ class BoundsTableModel(SEToolsTableModel):
 
             if role == Qt.DisplayRole:
                 if col == 0:
-                    return item.ruletype
+                    return item.ruletype.name
                 elif col == 1:
-                    return str(item.parent)
+                    return item.parent.name
                 elif col == 2:
-                    return str(item.child)
+                    return item.child.name
 
             elif role == Qt.UserRole:
                 return item

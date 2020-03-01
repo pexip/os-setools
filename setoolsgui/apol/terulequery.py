@@ -1,4 +1,4 @@
-# Copyright 2015, Tresys Technology, LLC
+# Copyright 2015-2016, Tresys Technology, LLC
 #
 # This file is part of SETools.
 #
@@ -21,17 +21,20 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
 from setools import TERuleQuery
 
 from ..logtosignal import LogHandlerToSignal
 from ..models import PermListModel, SEToolsListModel, invert_list_selection
 from ..terulemodel import TERuleTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_listviews, load_textedits, \
+    save_checkboxes, save_lineedits, save_listviews, save_textedits
 
 
-class TERuleQueryTab(SEToolsWidget, QScrollArea):
+class TERuleQueryTab(AnalysisTab):
 
     """A Type Enforcement rule query."""
 
@@ -48,7 +51,7 @@ class TERuleQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.terulequery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("terulequery.ui")
+        self.load_ui("apol/terulequery.ui")
 
         # set up source/target autocompletion
         typeattr_completion_list = [str(t) for t in self.policy.types()]
@@ -69,6 +72,7 @@ class TERuleQueryTab(SEToolsWidget, QScrollArea):
         self.default_type.setCompleter(self.type_completion)
 
         # setup indications of errors on source/target/default
+        self.errors = set()
         self.orig_palette = self.source.palette()
         self.error_palette = self.source.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -181,16 +185,14 @@ class TERuleQueryTab(SEToolsWidget, QScrollArea):
     #
 
     def clear_source_error(self):
-        self.source.setToolTip("Match the source type/attribute of the rule.")
-        self.source.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.source, "Match the source type/attribute of the rule.")
 
     def set_source(self):
         try:
             self.query.source = self.source.text()
         except Exception as ex:
             self.log.error("Source type/attribute error: {0}".format(ex))
-            self.source.setToolTip("Error: " + str(ex))
-            self.source.setPalette(self.error_palette)
+            self.set_criteria_error(self.source, ex)
 
     def set_source_regex(self, state):
         self.log.debug("Setting source_regex {0}".format(state))
@@ -203,16 +205,14 @@ class TERuleQueryTab(SEToolsWidget, QScrollArea):
     #
 
     def clear_target_error(self):
-        self.target.setToolTip("Match the target type/attribute of the rule.")
-        self.target.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.target, "Match the target type/attribute of the rule.")
 
     def set_target(self):
         try:
             self.query.target = self.target.text()
         except Exception as ex:
             self.log.error("Target type/attribute error: {0}".format(ex))
-            self.target.setToolTip("Error: " + str(ex))
-            self.target.setPalette(self.error_palette)
+            self.set_criteria_error(self.target, ex)
 
     def set_target_regex(self, state):
         self.log.debug("Setting target_regex {0}".format(state))
@@ -262,9 +262,9 @@ class TERuleQueryTab(SEToolsWidget, QScrollArea):
         self.xperms_equal.setEnabled(mode)
 
     def clear_xperm_error(self):
-        self.xperms.setToolTip("Match the extended permissions of the rule. Comma-separated "
-                               "permissions or ranges of permissions.")
-        self.xperms.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.xperms,
+                                  "Match the extended permissions of the rule. "
+                                  "Comma-separated permissions or ranges of permissions.")
 
     def set_xperm(self):
         xperms = []
@@ -288,16 +288,14 @@ class TERuleQueryTab(SEToolsWidget, QScrollArea):
 
         except Exception as ex:
             self.log.error("Extended permissions error: {0}".format(ex))
-            self.xperms.setToolTip("Error: " + str(ex))
-            self.xperms.setPalette(self.error_palette)
+            self.set_criteria_error(self.xperms, ex)
 
     #
     # Default criteria
     #
 
     def clear_default_error(self):
-        self.default_type.setToolTip("Match the default type the rule.")
-        self.default_type.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.default_type, "Match the default type the rule.")
 
     def set_default_type(self):
         self.query.default_regex = self.default_regex.isChecked()
@@ -306,8 +304,7 @@ class TERuleQueryTab(SEToolsWidget, QScrollArea):
             self.query.default = self.default_type.text()
         except Exception as ex:
             self.log.error("Default type error: {0}".format(ex))
-            self.default_type.setToolTip("Error: " + str(ex))
-            self.default_type.setPalette(self.error_palette)
+            self.set_criteria_error(self.default_type, ex)
 
     def set_default_regex(self, state):
         self.log.debug("Setting default_regex {0}".format(state))
@@ -325,6 +322,50 @@ class TERuleQueryTab(SEToolsWidget, QScrollArea):
             selected_bools.append(self.bool_model.data(index, Qt.UserRole))
 
         self.query.boolean = selected_bools
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander",
+                                         "allow", "allowxperm",
+                                         "auditallow", "auditallowxperm",
+                                         "neverallow", "neverallowxperm",
+                                         "dontaudit", "dontauditxperm",
+                                         "type_transition", "type_change", "type_member",
+                                         "source_indirect", "source_regex",
+                                         "target_indirect", "target_regex",
+                                         "perms_subset",
+                                         "xperms_equal",
+                                         "default_regex",
+                                         "bools_equal"])
+        save_lineedits(self, settings, ["source", "target", "xperms", "default_type"])
+        save_listviews(self, settings, ["tclass", "perms", "bool_criteria"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["allow", "allowxperm",
+                                         "auditallow", "auditallowxperm",
+                                         "neverallow", "neverallowxperm",
+                                         "dontaudit", "dontauditxperm",
+                                         "type_transition", "type_change", "type_member",
+                                         "criteria_expander", "notes_expander",
+                                         "source_indirect", "source_regex",
+                                         "target_indirect", "target_regex",
+                                         "perms_subset",
+                                         "xperms_equal",
+                                         "default_regex",
+                                         "bools_equal"])
+        load_lineedits(self, settings, ["source", "target", "xperms", "default_type"])
+        load_listviews(self, settings, ["tclass", "perms", "bool_criteria"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner

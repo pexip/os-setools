@@ -1,4 +1,5 @@
 # Copyright 2016, Tresys Technology, LLC
+# Copyright 2018, Chris PeBenito <pebenito@ieee.org>
 #
 # This file is part of SETools.
 #
@@ -18,8 +19,11 @@
 #
 from collections import namedtuple
 
+from ..policyrep import ConstraintRuletype
 from .descriptors import DiffResultDescriptor
 from .difference import Difference, SymbolWrapper, Wrapper
+from .objclass import class_wrapper_factory
+from .types import type_wrapper_factory
 
 
 class ConstraintsDifference(Difference):
@@ -129,13 +133,13 @@ class ConstraintsDifference(Difference):
         self._left_validatetrans = []
         self._left_mlsvalidatetrans = []
         for rule in self.left_policy.constraints():
-            if rule.ruletype == "constrain":
+            if rule.ruletype == ConstraintRuletype.constrain:
                 self._left_constrains.append(rule)
-            elif rule.ruletype == "mlsconstrain":
+            elif rule.ruletype == ConstraintRuletype.mlsconstrain:
                 self._left_mlsconstrains.append(rule)
-            elif rule.ruletype == "validatetrans":
+            elif rule.ruletype == ConstraintRuletype.validatetrans:
                 self._left_validatetrans.append(rule)
-            elif rule.ruletype == "mlsvalidatetrans":
+            elif rule.ruletype == ConstraintRuletype.mlsvalidatetrans:
                 self._left_mlsvalidatetrans.append(rule)
             else:
                 self.log.error("Unknown rule type: {0} (This is an SETools bug)".
@@ -146,13 +150,13 @@ class ConstraintsDifference(Difference):
         self._right_validatetrans = []
         self._right_mlsvalidatetrans = []
         for rule in self.right_policy.constraints():
-            if rule.ruletype == "constrain":
+            if rule.ruletype == ConstraintRuletype.constrain:
                 self._right_constrains.append(rule)
-            elif rule.ruletype == "mlsconstrain":
+            elif rule.ruletype == ConstraintRuletype.mlsconstrain:
                 self._right_mlsconstrains.append(rule)
-            elif rule.ruletype == "validatetrans":
+            elif rule.ruletype == ConstraintRuletype.validatetrans:
                 self._right_validatetrans.append(rule)
-            elif rule.ruletype == "mlsvalidatetrans":
+            elif rule.ruletype == ConstraintRuletype.mlsvalidatetrans:
                 self._right_mlsvalidatetrans.append(rule)
             else:
                 self.log.error("Unknown rule type: {0} (This is an SETools bug)".
@@ -185,10 +189,12 @@ class ConstraintWrapper(Wrapper):
 
     """Wrap constraints for diff purposes."""
 
+    __slots__ = ("ruletype", "tclass", "perms", "expr")
+
     def __init__(self, rule):
         self.origin = rule
         self.ruletype = rule.ruletype
-        self.tclass = SymbolWrapper(rule.tclass)
+        self.tclass = class_wrapper_factory(rule.tclass)
 
         try:
             self.perms = rule.perms
@@ -199,7 +205,7 @@ class ConstraintWrapper(Wrapper):
         self.key = hash(rule)
 
         self.expr = []
-        for op in rule.postfix_expression():
+        for op in rule.expression:
             if isinstance(op, frozenset):
                 # lists of types/users/roles
                 self.expr.append(frozenset(SymbolWrapper(item) for item in op))
@@ -215,6 +221,6 @@ class ConstraintWrapper(Wrapper):
 
     def __eq__(self, other):
         return self.ruletype == other.ruletype and \
-               self.tclass == other.tclass and \
-               self.perms == other.perms and \
-               self.expr == other.expr
+            self.tclass == other.tclass and \
+            self.perms == other.perms and \
+            self.expr == other.expr

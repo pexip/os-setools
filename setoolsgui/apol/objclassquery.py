@@ -21,17 +21,20 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
 from setools import ObjClassQuery
 
 from ..logtosignal import LogHandlerToSignal
 from ..models import PermListModel, SEToolsListModel, invert_list_selection
 from ..objclassmodel import ObjClassTableModel, class_detail
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
+from .exception import TabFieldError
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_lineedits, load_listviews, load_textedits, \
+    save_checkboxes, save_lineedits, save_listviews, save_textedits
 
 
-class ObjClassQueryTab(SEToolsWidget, QScrollArea):
+class ObjClassQueryTab(AnalysisTab):
 
     """ObjClass browser and query tab."""
 
@@ -48,7 +51,7 @@ class ObjClassQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.objclassquery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("objclassquery.ui")
+        self.load_ui("apol/objclassquery.ui")
 
         # populate class list
         self.class_model = SEToolsListModel(self)
@@ -72,6 +75,7 @@ class ObjClassQueryTab(SEToolsWidget, QScrollArea):
         self.table_results.sortByColumn(0, Qt.AscendingOrder)
 
         # setup indications of errors on level/range
+        self.errors = set()
         self.orig_palette = self.name.palette()
         self.error_palette = self.name.palette()
         self.error_palette.setColor(QPalette.Base, Qt.red)
@@ -128,16 +132,14 @@ class ObjClassQueryTab(SEToolsWidget, QScrollArea):
     # Name criteria
     #
     def clear_name_error(self):
-        self.name.setToolTip("Match the object class name.")
-        self.name.setPalette(self.orig_palette)
+        self.clear_criteria_error(self.name, "Match the object class name.")
 
     def set_name(self):
         try:
             self.query.name = self.name.text()
         except Exception as ex:
             self.log.error("Object class name error: {0}".format(ex))
-            self.name.setToolTip("Error: " + str(ex))
-            self.name.setPalette(self.error_palette)
+            self.set_criteria_error(self.name, ex)
 
     def set_name_regex(self, state):
         self.log.debug("Setting name_regex {0}".format(state))
@@ -167,6 +169,30 @@ class ObjClassQueryTab(SEToolsWidget, QScrollArea):
 
     def invert_perms_selection(self):
         invert_list_selection(self.perms.selectionModel())
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        if self.errors:
+            raise TabFieldError("Field(s) are in error: {0}".
+                                format(" ".join(o.objectName() for o in self.errors)))
+
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander", "name_regex",
+                                         "perms_equal"])
+        save_lineedits(self, settings, ["name"])
+        save_listviews(self, settings, ["common", "perms"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander", "name_regex",
+                                         "perms_equal"])
+        load_lineedits(self, settings, ["name"])
+        load_listviews(self, settings, ["common", "perms"])
+        load_textedits(self, settings, ["notes"])
 
     #
     # Results runner

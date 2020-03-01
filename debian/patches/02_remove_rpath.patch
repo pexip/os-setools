@@ -1,0 +1,10 @@
+--- a/setup.py
++++ b/setup.py
+@@ -103,7 +103,6 @@ cython_annotate = bool(os.environ.get("S
+ ext_py_mods = [Extension('setools.policyrep', ['setools/policyrep.pyx'],
+                          include_dirs=include_dirs,
+                          libraries=['selinux', 'sepol'],
+-                         library_dirs=lib_dirs,
+                          define_macros=macros,
+                          extra_compile_args=['-Werror', '-Wextra',
+                                              '-Waggregate-return',

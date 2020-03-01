@@ -21,17 +21,18 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
 from setools import MLSRuleQuery
 
 from ..logtosignal import LogHandlerToSignal
 from ..models import SEToolsListModel, invert_list_selection
 from ..mlsrulemodel import MLSRuleTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_textedits, save_checkboxes, save_textedits
 
 
-class SummaryTab(SEToolsWidget, QScrollArea):
+class SummaryTab(AnalysisTab):
 
     """An SELinux policy summary."""
 
@@ -41,7 +42,7 @@ class SummaryTab(SEToolsWidget, QScrollArea):
         self.setupUi(policy)
 
     def setupUi(self, p):
-        self.load_ui("summary.ui")
+        self.load_ui("apol/summary.ui")
 
         # Ensure settings are consistent with the initial .ui state
         self.notes.setHidden(not self.notes_expander.isChecked())
@@ -51,7 +52,7 @@ class SummaryTab(SEToolsWidget, QScrollArea):
 
         self.policy_version.setText(str(p.version))
         self.mls.setText(mls)
-        self.handle_unknown.setText(p.handle_unknown)
+        self.handle_unknown.setText(p.handle_unknown.name)
         self.class_count.setText(str(p.class_count))
         self.perms_count.setText(str(p.permission_count))
         self.type_count.setText(str(p.type_count))
@@ -114,3 +115,17 @@ class SummaryTab(SEToolsWidget, QScrollArea):
 
         # Fill policy capabilities list
         self.polcaps.addItems([str(c) for c in p.polcaps()])
+
+    #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        settings = {}
+        save_checkboxes(self, settings, ["notes_expander"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["notes_expander"])
+        load_textedits(self, settings, ["notes"])

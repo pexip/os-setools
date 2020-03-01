@@ -7,7 +7,6 @@
 export DEB_CFLAGS_MAINT_APPEND = -Wno-sign-compare
 
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
-BUILT_USING=$(shell dpkg-query -f '$${source:Package} (= $${source:Version}), ' -W "libsepol1-dev")
 
 export SEPOL = /usr/lib/$(DEB_HOST_MULTIARCH)/libsepol.a
 
@@ -18,11 +17,12 @@ override_dh_auto_build-arch:
 	dh_auto_build -a -O--buildsystem=pybuild
 	PATH=/usr/lib/$(DEB_HOST_MULTIARCH)/qt5/bin/:$(PATH) python3 setup.py build_qhc
 
-override_dh_install:
-	dh_install --list-missing
-
-override_dh_gencontrol:
-	dh_gencontrol -- -VBuilt-Using="$(BUILT_USING)"
+override_dh_missing:
+	dh_missing --list-missing
 
 override_dh_auto_test:
 	dh_auto_test || true
+
+override_dh_clean:
+	dh_clean
+	rm -f setools/policyrep/libpolicyrep.c

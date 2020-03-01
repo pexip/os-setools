@@ -16,11 +16,12 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
+import logging
+from contextlib import suppress
 
 from PyQt5.QtCore import QAbstractListModel, QItemSelectionModel, QAbstractTableModel, \
-                         QModelIndex, QStringListModel, Qt
-from setools.policyrep.exception import NoCommon
+    QModelIndex, QStringListModel, Qt
+from setools.exception import NoCommon
 
 
 def invert_list_selection(selection_model):
@@ -40,10 +41,14 @@ class SEToolsListModel(QAbstractListModel):
     objects return their string representations
     for Qt.DisplayRole and return the object
     for Qt.UserRole.
+
+    Some Python list-like functions are provided
+    for altering the model: append and remove
     """
 
     def __init__(self, parent):
         super(SEToolsListModel, self).__init__(parent)
+        self.log = logging.getLogger(__name__)
         self._item_list = None
 
     @property
@@ -64,6 +69,24 @@ class SEToolsListModel(QAbstractListModel):
 
     def columnCount(self, parent=QModelIndex()):
         return 1
+
+    def append(self, item):
+        """Append the item to the list."""
+        index = self.rowCount()
+        self.beginInsertRows(QModelIndex(), index, index)
+        self.item_list.append(item)
+        self.endInsertRows()
+
+    def remove(self, item):
+        """Remove the first instance of the specified item from the list."""
+        try:
+            row = self.item_list.index(item)
+        except ValueError:
+            self.log.debug("Attempted to remove item {0!r} but it is not in the list".format(item))
+        else:
+            self.beginRemoveRows(QModelIndex(), row, row)
+            del self.item_list[row]
+            self.endRemoveRows()
 
     def data(self, index, role):
         if self.item_list and index.isValid():
@@ -96,19 +119,15 @@ class PermListModel(SEToolsListModel):
         for cls in self.policy.classes():
             permlist.update(cls.perms)
 
-            try:
+            with suppress(NoCommon):
                 permlist.update(cls.common.perms)
-            except NoCommon:
-                pass
 
         # create intersection
         for cls in classes:
             cls_perms = cls.perms
 
-            try:
+            with suppress(NoCommon):
                 cls_perms.update(cls.common.perms)
-            except NoCommon:
-                pass
 
             permlist.intersection_update(cls_perms)
 
@@ -119,7 +138,7 @@ class SEToolsTableModel(QAbstractTableModel):
 
     """Base class for SETools table models."""
 
-    headers = defaultdict(str)
+    headers = []
 
     def __init__(self, parent):
         super(SEToolsTableModel, self).__init__(parent)

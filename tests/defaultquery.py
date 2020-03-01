@@ -15,18 +15,24 @@
 # You should have received a copy of the GNU General Public License
 # along with SETools.  If not, see <http://www.gnu.org/licenses/>.
 #
+import os
 import unittest
 
-from setools import SELinuxPolicy, DefaultQuery
-from setools.policyrep.exception import InvalidDefaultType, InvalidClass, \
-                                        InvalidDefaultValue, InvalidDefaultRange
+from setools import DefaultQuery, DefaultRuletype, DefaultValue
+from setools.exception import InvalidClass
+
+from .policyrep.util import compile_policy
 
 
 class DefaultQueryTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.p = SELinuxPolicy("tests/defaultquery.conf")
+        cls.p = compile_policy("tests/defaultquery.conf")
+
+    @classmethod
+    def tearDownClass(cls):
+        os.unlink(cls.p.path)
 
     def test_000_unset(self):
         """Default query: no criteria."""
@@ -45,9 +51,9 @@ class DefaultQueryTest(unittest.TestCase):
         self.assertEqual(1, len(defaults))
 
         d = defaults[0]
-        self.assertEqual("default_user", d.ruletype)
+        self.assertEqual(DefaultRuletype.default_user, d.ruletype)
         self.assertEqual("infoflow", d.tclass)
-        self.assertEqual("target", d.default)
+        self.assertEqual(DefaultValue.target, d.default)
 
     def test_010_class_list(self):
         """Default query: object class list match."""
@@ -79,7 +85,7 @@ class DefaultQueryTest(unittest.TestCase):
 
     def test_900_invalid_ruletype(self):
         """Default query: invalid ruletype"""
-        with self.assertRaises(InvalidDefaultType):
+        with self.assertRaises(KeyError):
             q = DefaultQuery(self.p, ruletype=["INVALID"])
 
     def test_901_invalid_class(self):
@@ -89,10 +95,10 @@ class DefaultQueryTest(unittest.TestCase):
 
     def test_902_invalid_default_value(self):
         """Default query: invalid default value"""
-        with self.assertRaises(InvalidDefaultValue):
+        with self.assertRaises(KeyError):
             q = DefaultQuery(self.p, default="INVALID")
 
     def test_903_invalid_default_range(self):
         """Default query: invalid default range"""
-        with self.assertRaises(InvalidDefaultRange):
+        with self.assertRaises(KeyError):
             q = DefaultQuery(self.p, default_range="INVALID")

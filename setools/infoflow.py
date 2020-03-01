@@ -18,16 +18,18 @@
 #
 import itertools
 import logging
+from contextlib import suppress
 
 import networkx as nx
-from networkx.exception import NetworkXError, NetworkXNoPath
+from networkx.exception import NetworkXError, NetworkXNoPath, NodeNotFound
 
 from .descriptors import EdgeAttrIntMax, EdgeAttrList
+from .policyrep import TERuletype
 
 __all__ = ['InfoFlowAnalysis']
 
 
-class InfoFlowAnalysis(object):
+class InfoFlowAnalysis:
 
     """Information flow analysis."""
 
@@ -116,14 +118,12 @@ class InfoFlowAnalysis(object):
         self.log.info("Generating one shortest information flow path from {0} to {1}...".
                       format(s, t))
 
-        try:
-            yield self.__generate_steps(nx.shortest_path(self.subG, s, t))
-        except (NetworkXNoPath, NetworkXError):
-            # NetworkXError: the type is valid but not in graph, e.g.
+        with suppress(NetworkXNoPath, NodeNotFound):
+            # NodeNotFound: the type is valid but not in graph, e.g.
             # excluded or disconnected due to min weight
             # NetworkXNoPath: no paths or the target type is
             # not in the graph
-            pass
+            yield self.__generate_steps(nx.shortest_path(self.subG, s, t))
 
     def all_paths(self, source, target, maxlen=2):
         """
@@ -157,15 +157,13 @@ class InfoFlowAnalysis(object):
         self.log.info("Generating all information flow paths from {0} to {1}, max length {2}...".
                       format(s, t, maxlen))
 
-        try:
-            for path in nx.all_simple_paths(self.subG, s, t, maxlen):
-                yield self.__generate_steps(path)
-        except (NetworkXNoPath, NetworkXError):
-            # NetworkXError: the type is valid but not in graph, e.g.
+        with suppress(NetworkXNoPath, NodeNotFound):
+            # NodeNotFound: the type is valid but not in graph, e.g.
             # excluded or disconnected due to min weight
             # NetworkXNoPath: no paths or the target type is
             # not in the graph
-            pass
+            for path in nx.all_simple_paths(self.subG, s, t, maxlen):
+                yield self.__generate_steps(path)
 
     def all_shortest_paths(self, source, target):
         """
@@ -193,17 +191,13 @@ class InfoFlowAnalysis(object):
         self.log.info("Generating all shortest information flow paths from {0} to {1}...".
                       format(s, t))
 
-        try:
-            for path in nx.all_shortest_paths(self.subG, s, t):
-                yield self.__generate_steps(path)
-        except (NetworkXNoPath, NetworkXError, KeyError):
-            # NetworkXError: the type is valid but not in graph, e.g.
+        with suppress(NetworkXNoPath, NodeNotFound):
+            # NodeNotFound: the type is valid but not in graph, e.g.
             # excluded or disconnected due to min weight
             # NetworkXNoPath: no paths or the target type is
             # not in the graph
-            # KeyError: work around NetworkX bug
-            # when the source node is not in the graph
-            pass
+            for path in nx.all_shortest_paths(self.subG, s, t):
+                yield self.__generate_steps(path)
 
     def infoflows(self, type_, out=True):
         """
@@ -232,18 +226,17 @@ class InfoFlowAnalysis(object):
         self.log.info("Generating all information flows {0} {1}".
                       format("out of" if out else "into", s))
 
-        if out:
-            flows = self.subG.out_edges_iter(s)
-        else:
-            flows = self.subG.in_edges_iter(s)
-
-        try:
-            for source, target in flows:
-                yield Edge(self.subG, source, target)
-        except NetworkXError:
+        with suppress(NetworkXError):
             # NetworkXError: the type is valid but not in graph, e.g.
             # excluded or disconnected due to min weight
-            pass
+
+            if out:
+                flows = self.subG.out_edges(s)
+            else:
+                flows = self.subG.in_edges(s)
+
+            for source, target in flows:
+                yield Edge(self.subG, source, target)
 
     def get_stats(self):  # pragma: no cover
         """
@@ -301,7 +294,7 @@ class InfoFlowAnalysis(object):
         self.log.info("Building information flow graph from {0}...".format(self.policy))
 
         for rule in self.policy.terules():
-            if rule.ruletype != "allow":
+            if rule.ruletype != TERuletype.allow:
                 continue
 
             (rweight, wweight) = self.perm_map.rule_weight(rule)
@@ -337,14 +330,14 @@ class InfoFlowAnalysis(object):
 
         # delete excluded types from subgraph
         nodes = [n for n in self.G.nodes() if n not in self.exclude]
-        self.subG = self.G.subgraph(nodes)
+        self.subG = self.G.subgraph(nodes).copy()
 
         # delete edges below minimum weight.
         # no need if weight is 1, since that
         # does not exclude any edges.
         if self.min_weight > 1:
             delete_list = []
-            for s, t in self.subG.edges_iter():
+            for s, t in self.subG.edges():
                 edge = Edge(self.subG, s, t)
                 if edge.weight < self.min_weight:
                     delete_list.append(edge)
@@ -358,7 +351,7 @@ class InfoFlowAnalysis(object):
             nx.number_of_edges(self.subG)))
 
 
-class Edge(object):
+class Edge:
 
     """
     A graph edge.  Also used for returning information flow steps.

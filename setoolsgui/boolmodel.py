@@ -16,8 +16,6 @@
 # License along with SETools.  If not, see
 # <http://www.gnu.org/licenses/>.
 #
-from collections import defaultdict
-
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QTextCursor
 
@@ -45,7 +43,7 @@ class BooleanTableModel(SEToolsTableModel):
 
     """Table-based model for booleans."""
 
-    headers = defaultdict(str, {0: "Name", 1: "Default State"})
+    headers = ["Name", "Default State"]
 
     def data(self, index, role):
         if self.resultlist and index.isValid():
@@ -55,7 +53,7 @@ class BooleanTableModel(SEToolsTableModel):
 
             if role == Qt.DisplayRole:
                 if col == 0:
-                    return str(boolean)
+                    return boolean.name
                 elif col == 1:
                     return str(boolean.state)
 

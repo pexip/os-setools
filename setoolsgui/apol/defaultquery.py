@@ -1,4 +1,5 @@
 # Copyright 2016, Tresys Technology, LLC
+# Copyright 2016, Chris PeBenito <pebenito@ieee.org>
 #
 # This file is part of SETools.
 #
@@ -21,17 +22,19 @@ import logging
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QStringListModel, QThread
 from PyQt5.QtGui import QPalette, QTextCursor
-from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog, QScrollArea
-from setools import DefaultQuery
+from PyQt5.QtWidgets import QCompleter, QHeaderView, QMessageBox, QProgressDialog
+from setools import DefaultQuery, DefaultValue, DefaultRangeValue
 
 from ..logtosignal import LogHandlerToSignal
 from ..models import SEToolsListModel, invert_list_selection
 from ..defaultmodel import DefaultTableModel
-from ..widget import SEToolsWidget
+from .analysistab import AnalysisTab
 from .queryupdater import QueryResultsUpdater
+from .workspace import load_checkboxes, load_comboboxes, load_listviews, load_textedits, \
+    save_checkboxes, save_comboboxes, save_listviews, save_textedits
 
 
-class DefaultQueryTab(SEToolsWidget, QScrollArea):
+class DefaultQueryTab(AnalysisTab):
 
     """Default browser and query tab."""
 
@@ -48,7 +51,7 @@ class DefaultQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.defaultquery").removeHandler(self.handler)
 
     def setupUi(self):
-        self.load_ui("defaultquery.ui")
+        self.load_ui("apol/defaultquery.ui")
 
         # set up results
         self.table_results_model = DefaultTableModel(self)
@@ -61,6 +64,16 @@ class DefaultQueryTab(SEToolsWidget, QScrollArea):
         self.class_model = SEToolsListModel(self)
         self.class_model.item_list = sorted(self.policy.classes())
         self.tclass.setModel(self.class_model)
+
+        # these two lists have empty string as their first item
+        # (in the .ui file):
+        # populate default value list
+        for i, e in enumerate(DefaultValue, start=1):
+            self.default_value.insertItem(i, e.name, e)
+
+        # populate default range value list
+        for i, e in enumerate(DefaultRangeValue, start=1):
+            self.default_range_value.insertItem(i, e.name, e)
 
         # set up processing thread
         self.thread = QThread()
@@ -85,11 +98,11 @@ class DefaultQueryTab(SEToolsWidget, QScrollArea):
         logging.getLogger("setools.defaultquery").addHandler(self.handler)
 
         # Ensure settings are consistent with the initial .ui state
-        self.default_range_2.setEnabled(self.default_range.isChecked())
+        self.default_range_value.setEnabled(self.default_range.isChecked())
         self.notes.setHidden(not self.notes_expander.isChecked())
 
         # connect signals
-        self.default_range.toggled.connect(self.default_range_2.setEnabled)
+        self.default_range.toggled.connect(self.default_range_value.setEnabled)
         self.clear_ruletypes.clicked.connect(self.clear_all_ruletypes)
         self.all_ruletypes.clicked.connect(self.set_all_ruletypes)
         self.tclass.selectionModel().selectionChanged.connect(self.set_tclass)
@@ -125,6 +138,26 @@ class DefaultQueryTab(SEToolsWidget, QScrollArea):
         invert_list_selection(self.tclass.selectionModel())
 
     #
+    # Save/Load tab
+    #
+    def save(self):
+        """Return a dictionary of settings."""
+        settings = {}
+        save_checkboxes(self, settings, ["criteria_expander", "notes_expander", "default_user",
+                                         "default_role", "default_type", "default_range"])
+        save_comboboxes(self, settings, ["default_value", "default_range_value"])
+        save_listviews(self, settings, ["tclass"])
+        save_textedits(self, settings, ["notes"])
+        return settings
+
+    def load(self, settings):
+        load_checkboxes(self, settings, ["criteria_expander", "notes_expander", "default_user",
+                                         "default_role", "default_type", "default_range"])
+        load_comboboxes(self, settings, ["default_value", "default_range_value"])
+        load_listviews(self, settings, ["tclass"])
+        load_textedits(self, settings, ["notes"])
+
+    #
     # Results runner
     #
     def run(self, button):
@@ -136,10 +169,10 @@ class DefaultQueryTab(SEToolsWidget, QScrollArea):
                 rule_types.append(mode.objectName())
 
         self.query.ruletype = rule_types
-        self.query.default = self.default_2.currentData(Qt.DisplayRole)
+        self.query.default = self.default_value.currentData(Qt.UserRole)
 
-        if self.default_range_2.isEnabled():
-            self.query.default_range = self.default_range_2.currentData(Qt.DisplayRole)
+        if self.default_range_value.isEnabled():
+            self.query.default_range = self.default_range_value.currentData(Qt.UserRole)
         else:
             self.query.default_range = None
 

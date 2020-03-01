@@ -18,10 +18,11 @@
 #
 import logging
 import re
+from contextlib import suppress
 
 from .descriptors import CriteriaDescriptor, CriteriaSetDescriptor
+from .exception import NoCommon
 from .mixins import MatchName
-from .policyrep.exception import NoCommon
 from .query import PolicyQuery
 from .util import match_regex, match_regex_or_set
 
@@ -92,10 +93,8 @@ class ObjClassQuery(MatchName, PolicyQuery):
                 perms = class_.perms
 
                 if self.perms_indirect:
-                    try:
+                    with suppress(NoCommon):
                         perms |= class_.common.perms
-                    except NoCommon:
-                        pass
 
                 if not match_regex_or_set(
                         perms,
